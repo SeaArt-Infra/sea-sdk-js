@@ -1,48 +1,48 @@
 # Sea JavaScript SDK
 
-> Beta：SDK API 和 Sea gateway 行为仍可能随网关版本调整。
+> Beta: SDK APIs and Sea gateway behavior may still change with gateway versions.
 
-Sea AI 网关的 Node.js SDK，用于通过统一网关调用多模态、LLM 和厂商透传能力。
+Node.js SDK for the Sea AI gateway, used to call multimodal, LLM, and vendor passthrough capabilities through the unified gateway.
 
-特点：
+Features:
 
-- ESM-only，要求 Node.js 18 或以上版本
-- 保留原始请求透传能力
-- 支持 SSE 流式响应解析
-- 支持任务轮询和通用 task builder
+- ESM-only, requires Node.js 18 or later
+- Preserves raw request passthrough capabilities
+- Supports SSE streaming response parsing
+- Supports task polling and a general task builder
 
-## 功能导航
+## Feature Navigation
 
-| 服务 | Client 字段 | 功能 |
+| Service | Client Field | Capability |
 |------|-------------|------|
-| [多模态 API](#多模态-api) | `client.modal` / `client.Modal` | 模型列表、参数详情、生成任务、预扣费查询和厂商透传 |
-| [图片/视频鉴黄](#图片视频鉴黄) | `client.modal.scanImage(...)` | 检测图片、GIF 或视频内容安全风险 |
-| [敏感词检测](#敏感词检测) | `client.modal.scanText(...)` | 检测文本敏感词和组合词风险 |
-| [文本内容安全审核](#文本内容安全审核) | `client.modal.scanTextContent(...)` | 审核短文本内容安全风险等级和分类标签 |
-| [人脸检测](#人脸检测) | `client.modal.scanFace(...)` | 检测图片或视频中的人脸相关结果 |
-| [音频检测](#音频检测) | `client.modal.scanAudio(...)` | 检测音频内容风险 |
-| [LLM API](#llm-api) | `client.llm` / `client.LLM` | OpenAI / Anthropic / Responses / Embeddings / Rerank 等兼容接口 |
+| [Multimodal API](#multimodal-api) | `client.modal` / `client.Modal` | Model listing, parameter details, generation tasks, precharge estimates, and vendor passthrough |
+| [Image/Video Safety Scan](#imagevideo-safety-scan) | `client.modal.scanImage(...)` | Detect content-safety risks in images, GIFs, or videos |
+| [Sensitive-Word Scan](#sensitive-word-scan) | `client.modal.scanText(...)` | Detect sensitive words and combination-rule risks in text |
+| [Text Content Safety Scan](#text-content-safety-scan) | `client.modal.scanTextContent(...)` | Review short text risk level and category label |
+| [Face Scan](#face-scan) | `client.modal.scanFace(...)` | Detect face-related results in images or videos |
+| [Audio Scan](#audio-scan) | `client.modal.scanAudio(...)` | Detect audio content risks |
+| [LLM API](#llm-api) | `client.llm` / `client.LLM` | OpenAI / Anthropic / Responses / Embeddings / Rerank compatible APIs |
 
-## 安装
+## Installation
 
-从 GitHub 安装最新代码：
+Install the latest code from GitHub:
 
 ```bash
 npm install https://github.com/SeaArt-Infra/sea_sdk_js.git
 ```
 
-发布到 npm 后，也可以通过包名安装：
+After it is published to npm, you can also install it by package name:
 
 ```bash
 npm install sea_sdk_js
 ```
 
-要求：
+Requirements:
 
 - Node.js 18+
-- ESM 项目
+- ESM project
 
-## 初始化
+## Initialization
 
 ```js
 import { Client } from 'sea_sdk_js';
@@ -52,7 +52,7 @@ const client = new Client({
 });
 ```
 
-通过 `baseURL` 配置统一网关地址，SDK 会基于该地址调用多模态、LLM 和透传等能力。
+Configure the unified gateway address through `baseURL`; the SDK uses it to call multimodal, LLM, passthrough, and other capabilities.
 
 ```js
 const client = new Client({
@@ -63,9 +63,9 @@ const client = new Client({
 });
 ```
 
-## 多模态 API
+## Multimodal API
 
-### 模型列表和参数详情
+### Model List and Parameter Details
 
 ```js
 const models = await client.modal.listModels({
@@ -80,7 +80,7 @@ const skill = await client.modal.getModelSkill('alibaba_animate_anyone_detect');
 console.log(skill);
 ```
 
-`listModels` / `searchModels` 支持的查询参数：
+`listModels` / `searchModels` supports these query parameters:
 
 - `query` -> `q`
 - `input` -> `input`
@@ -89,11 +89,11 @@ console.log(skill);
 - `provider` -> `provider`
 - `limit` -> `limit`
 
-### 生成任务
+### Generation Tasks
 
-创建任务有两种常用方式：直接传入原始请求 object，或使用 `newTask` typed helper 构造请求体。两种方式最终都会调用 `client.modal.create(...)`。
+There are two common ways to create a task: pass the raw request object directly, or use the `newTask` typed helper to build the request body. Both methods eventually call `client.modal.create(...)`.
 
-**方式一：直接传入原始请求 object**
+**Method 1: Pass the raw request object directly**
 
 ```js
 import { withHeader } from 'sea_sdk_js';
@@ -107,7 +107,7 @@ const task = await client.modal.create(
         params: {
           input: {
             img_url: 'https://dashscope.oss-cn-beijing.aliyuncs.com/images/dog_and_girl.jpeg',
-            prompt: '小狗和女孩在秋天的公园里快乐地玩耍',
+            prompt: 'A dog and a girl playing happily in an autumn park',
           },
           parameters: {
             resolution: '720P',
@@ -125,9 +125,9 @@ const task = await client.modal.create(
 console.log(task.id, task.status);
 ```
 
-`moderation` 为布尔类型，非必传；`true` 表示开白，`false` 表示非开白。`params` 为模型参数，具体结构由模型定义决定。
+`moderation` is a boolean and is optional; `true` means allowlisted, and `false` means not allowlisted. `params` contains model parameters, and the specific structure is determined by the model definition.
 
-**方式二：使用 Typed helper 构造请求体**
+**Method 2: Use the typed helper to build the request body**
 
 ```js
 import { newTask } from 'sea_sdk_js';
@@ -137,7 +137,7 @@ const body = newTask('alibaba_wanx26_i2v_flash')
   .params({
     input: {
       img_url: 'https://dashscope.oss-cn-beijing.aliyuncs.com/images/dog_and_girl.jpeg',
-      prompt: '小狗和女孩在秋天的公园里快乐地玩耍',
+      prompt: 'A dog and a girl playing happily in an autumn park',
     },
     parameters: {
       resolution: '720P',
@@ -152,7 +152,7 @@ const body = newTask('alibaba_wanx26_i2v_flash')
 const task = await client.modal.create(body);
 ```
 
-**轮询结果**
+**Polling results**
 
 ```js
 import {
@@ -169,24 +169,24 @@ const task = await client.modal.wait(
 console.log(task.status, task.progress, task.urls());
 ```
 
-也可以在创建后继续等待：
+You can also continue waiting after creation:
 
 ```js
 const task = await client.modal.create({ model: 'alibaba_wanx26_i2v_flash' });
 const done = await task.wait(withPollInterval(5000));
 ```
 
-为了兼容 Go 风格命名，也提供大写别名：
+Uppercase aliases are also provided for compatibility with Go-style naming:
 
 ```js
 const task = await client.Modal.Create(body);
 ```
 
-### 预扣费查询
+### Precharge Estimate
 
-预扣费查询请求参数与创建任务相同，可用于提前预估费用。支持两种常用方式：直接传入原始请求 object，或使用 `newTask` typed helper 构造请求体。
+Precharge estimate request parameters are the same as task creation and can be used to estimate costs in advance. Two common methods are supported: pass the raw request object directly, or use the `newTask` typed helper to build the request body.
 
-**方式一：直接传入原始请求 object**
+**Method 1: Pass the raw request object directly**
 
 ```js
 const resp = await client.modal.precharge({
@@ -206,7 +206,7 @@ console.log(resp.status);
 console.log(resp.data.billing_model, resp.data.cost, resp.data.currency);
 ```
 
-**方式二：使用 Typed helper 构造请求体**
+**Method 2: Use the typed helper to build the request body**
 
 ```js
 const body = newTask('volces_seedream_4_5')
@@ -221,7 +221,7 @@ console.log(resp.status);
 console.log(resp.data.billing_model, resp.data.cost, resp.data.currency);
 ```
 
-**响应示例**
+**Response example**
 
 ```json
 {
@@ -240,11 +240,11 @@ console.log(resp.data.billing_model, resp.data.cost, resp.data.currency);
 }
 ```
 
-### Passthrough API（厂商透传）
+### Passthrough API (Vendor Passthrough)
 
-Passthrough 层保留厂商原始 API 形态。路径需要带厂商前缀，例如 `/kling/...`、`/vidu/...`、`/google/...`。
+The passthrough layer preserves the vendor's original API shape. Paths must include the vendor prefix, such as `/kling/...`, `/vidu/...`, or `/google/...`.
 
-**方式一：JSON object 请求**
+**Method 1: JSON object request**
 
 ```js
 const resp = await client.passthrough.post(
@@ -259,7 +259,7 @@ const resp = await client.passthrough.post(
 console.log(resp.statusCode, await resp.text());
 ```
 
-**方式二：原始字节透传**
+**Method 2: Raw byte passthrough**
 
 ```js
 const body = new TextEncoder().encode('{"contents":[{"parts":[{"text":"paint a cat"}]}]}');
@@ -273,7 +273,7 @@ const resp = await client.passthrough.requestRaw(
 console.log(resp.statusCode, await resp.text());
 ```
 
-当前提供：
+Currently provided:
 
 - `request`
 - `requestRaw`
@@ -282,9 +282,9 @@ console.log(resp.statusCode, await resp.text());
 - `put`
 - `delete`
 
-## 图片/视频鉴黄
+## Image/Video Safety Scan
 
-图片/视频鉴黄接口对应 `POST /v1/image/scan`，用于对图片、GIF 或视频内容进行安全风险检测。调用时需要提供待检测媒体 URL，并通过 `risk_types` 指定需要检测的风险类型。
+The image/video safety scan API maps to `POST /v1/image/scan` and is used to detect content-safety risks in images, GIFs, or videos. When calling it, provide the media URL to scan and specify the risk types through `risk_types`.
 
 ```js
 import {
@@ -309,7 +309,7 @@ const result = await client.modal.scanImage({
 console.log(result.ok, result.nsfw_level, result.risk_types);
 ```
 
-也支持视频检测：
+Video detection is also supported:
 
 ```js
 const result = await client.modal.scanImage({
@@ -320,7 +320,7 @@ const result = await client.modal.scanImage({
 });
 ```
 
-**审核通过响应示例**
+**Pass response example**
 
 ```json
 {
@@ -334,7 +334,7 @@ const result = await client.modal.scanImage({
 }
 ```
 
-**命中风险响应示例**
+**Risk-hit response example**
 
 ```json
 {
@@ -354,9 +354,9 @@ const result = await client.modal.scanImage({
 }
 ```
 
-## 敏感词检测
+## Sensitive-Word Scan
 
-敏感词检测接口对应 `POST /v1/text/scan`，用于检测输入文本中的敏感词、组合词和风险命中结果。
+The sensitive-word scan API maps to `POST /v1/text/scan` and is used to detect sensitive words, combination words, and risk-hit results in input text.
 
 ```js
 const result = await client.modal.scanText({
@@ -371,7 +371,7 @@ console.log(result.data.sensitive_words);
 console.log(result.extra);
 ```
 
-**审核通过响应示例**
+**Pass response example**
 
 ```json
 {
@@ -391,9 +391,9 @@ console.log(result.extra);
 }
 ```
 
-## 文本内容安全审核
+## Text Content Safety Scan
 
-文本内容安全审核接口对应 `POST /v1/text/content/scan`，用于对短文本进行内容安全审核。该接口与旧敏感词检测 `POST /v1/text/scan` 并存。
+The text content safety scan API maps to `POST /v1/text/content/scan` and is used to review short text for content safety. This API coexists with the legacy sensitive-word scan API `POST /v1/text/scan`.
 
 ```js
 const result = await client.modal.scanTextContent({
@@ -406,18 +406,18 @@ console.log(result.ok, result.level, result.label, result.reason);
 console.log(result.usage);
 ```
 
-**响应字段**
+**Response fields**
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `ok` | `boolean` | 是否审核成功 |
-| `level` | `number` | 风险等级，范围 `0-6`，数值越大风险越高 |
-| `label` | `string` | 分类标签，英文 |
-| `reason` | `string` | 判定理由，英文或错误原因 |
-| `usage` | `object` | 网关注入的计费信息 |
-| `extra` | `object` | 上游返回的未建模字段 |
+| `ok` | `boolean` | Whether the review succeeded |
+| `level` | `number` | Risk level, range `0-6`; higher values indicate higher risk |
+| `label` | `string` | Category label, in English |
+| `reason` | `string` | Decision reason, in English, or error reason |
+| `usage` | `object` | Billing information injected by the gateway |
+| `extra` | `object` | Unmodeled fields returned by the upstream service |
 
-**审核通过响应示例**
+**Pass response example**
 
 ```json
 {
@@ -431,9 +431,9 @@ console.log(result.usage);
 }
 ```
 
-## 人脸检测
+## Face Scan
 
-人脸检测接口对应 `POST /v1/face/scan`，用于检测图片或视频中的人脸相关结果。调用时可以传入媒体 URL，也可以传入图片 base64 内容。
+The face scan API maps to `POST /v1/face/scan` and is used to detect face-related results in images or videos. You can pass a media URL or image base64 content.
 
 ```js
 const result = await client.modal.scanFace({
@@ -446,16 +446,16 @@ console.log(result.ok, result.usage);
 console.log(result.extra);
 ```
 
-**响应字段**
+**Response fields**
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `ok` | `boolean` | 检测请求是否成功完成 |
-| `error` | `string` | 上游业务错误信息；成功时通常为空 |
-| `usage` | `object` | 网关注入的计费信息 |
-| `extra` | `object` | 上游返回的未建模字段，例如人脸数量等 |
+| `ok` | `boolean` | Whether the detection request completed successfully |
+| `error` | `string` | Upstream business error information; usually empty on success |
+| `usage` | `object` | Billing information injected by the gateway |
+| `extra` | `object` | Unmodeled fields returned by the upstream service, such as face count |
 
-**未检测到人脸响应示例（SDK 返回结构）**
+**No-face response example (SDK return structure)**
 
 ```json
 {
@@ -470,7 +470,7 @@ console.log(result.extra);
 }
 ```
 
-**检测到人脸响应示例（SDK 返回结构）**
+**Face-detected response example (SDK return structure)**
 
 ```json
 {
@@ -485,9 +485,9 @@ console.log(result.extra);
 }
 ```
 
-## 音频检测
+## Audio Scan
 
-音频检测接口对应 `POST /v1/audio/scan`，用于检测音频内容风险。调用时需要提供可访问的音频 URL，`duration` 用于计费和统计。
+The audio scan API maps to `POST /v1/audio/scan` and is used to detect audio content risks. When calling it, provide an accessible audio URL; `duration` is used for billing and statistics.
 
 ```js
 const result = await client.modal.scanAudio({
@@ -500,18 +500,18 @@ console.log(result.riskLevel, result.allLabels);
 console.log(result.extra);
 ```
 
-**审核通过响应示例**
+**Pass response example**
 
 ```json
 {
   "code": 1100,
-  "message": "成功",
+  "message": "success",
   "requestId": "a63b89046c70435a4fb9a0d36439d0ee",
   "btId": "https://example.com/audio/sample.mp3",
   "detail": {
     "audioDetail": [],
     "audioTags": {},
-    "audioText": "示例音频转写文本",
+    "audioText": "sample audio transcription text",
     "audioTime": 4,
     "code": 1100,
     "requestParams": {},
@@ -522,7 +522,7 @@ console.log(result.extra);
 
 ## LLM API
 
-非流式 LLM 方法返回原始 JSON 字符串，使用 `decode(raw)` 反序列化：
+Non-streaming LLM methods return raw JSON strings. Use `decode(raw)` to deserialize them:
 
 ```js
 import { decode } from 'sea_sdk_js';
@@ -537,21 +537,21 @@ const resp = decode(raw);
 console.log(resp.choices[0].message.content);
 ```
 
-当前支持的方法：
+Currently supported methods:
 
-| 方法 | 说明 |
+| Method | Description |
 |------|------|
-| `chatCompletions` | 调用 OpenAI Chat Completions 兼容接口，返回原始 JSON 字符串 |
-| `chatCompletionsStream` | 调用 Chat Completions 流式接口，返回可异步迭代的 SSE 流式事件 |
-| `messages` | 调用 Anthropic Messages 兼容接口，返回原始 JSON 字符串 |
-| `messagesStream` | 调用 Messages 流式接口，返回可异步迭代的 SSE 流式事件 |
-| `responses` | 调用 OpenAI Responses 兼容接口，返回原始 JSON 字符串 |
-| `responsesStream` | 调用 Responses 流式接口，返回可异步迭代的 SSE 流式事件 |
-| `rerank` | 调用文本重排接口 |
-| `embeddings` | 调用向量生成接口 |
-| `listModels` | 查询 LLM 模型列表 |
+| `chatCompletions` | Calls the OpenAI-compatible Chat Completions API and returns the raw JSON string |
+| `chatCompletionsStream` | Calls the Chat Completions streaming API and returns async-iterable SSE streaming events |
+| `messages` | Calls the Anthropic Messages-compatible API and returns the raw JSON string |
+| `messagesStream` | Calls the Messages streaming API and returns async-iterable SSE streaming events |
+| `responses` | Calls the OpenAI-compatible Responses API and returns the raw JSON string |
+| `responsesStream` | Calls the Responses streaming API and returns async-iterable SSE streaming events |
+| `rerank` | Calls the text reranking API |
+| `embeddings` | Calls the embedding generation API |
+| `listModels` | Queries the LLM model list |
 
-流式方法返回可异步迭代的 SSE 流式事件：
+Streaming methods return async-iterable SSE streaming events:
 
 ```js
 for await (const event of client.llm.chatCompletionsStream({
@@ -567,7 +567,7 @@ for await (const event of client.llm.chatCompletionsStream({
 }
 ```
 
-Responses 或 Messages 流式响应可以使用文本拼接 helper：
+Responses or Messages streaming responses can use the text assembler helper:
 
 ```js
 import { ResponsesStreamTextAssembler } from 'sea_sdk_js';
