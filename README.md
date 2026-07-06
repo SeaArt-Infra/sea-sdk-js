@@ -284,7 +284,7 @@ Currently provided:
 
 ## Image/Video Safety Scan
 
-The image/video safety scan API maps to `POST /v1/image/scan` and is used to detect content-safety risks in images, GIFs, or videos. When calling it, provide either the media URL or base64 image content, and specify the risk types through `risk_types`.
+The image/video safety scan API maps to `POST /v1/image/scan` and is used to detect content-safety risks in images or videos. When calling it, provide either the media URL or base64 image content, and specify the risk types through `risk_types`.
 
 ```js
 import {
@@ -302,29 +302,56 @@ const result = await client.modal.scanImage({
     ImageScanRiskTypeViolent,
     ImageScanRiskTypeChild,
   ],
-  detected_age: 0,
-  is_video: 0,
+  detected_age: false,
+  is_video: false,
+  canary: 'B',
+  scene: 'avatar',
 });
 
 console.log(result.ok, result.nsfw_level, result.risk_types);
 ```
 
-Video detection is also supported:
+Video detection is also supported. Video scans must use `uri` and do not support `img_base64`:
 
 ```js
 const result = await client.modal.scanImage({
   uri: 'https://example.com/video.mp4',
   risk_types: [ImageScanRiskTypeErotic, ImageScanRiskTypeViolent],
-  is_video: 1,
+  is_video: true,
   duration: 12.5,
 });
 ```
 
-Base64 image content is also supported:
+Base64 image content is also supported for image scans:
 
 ```js
 const result = await client.modal.scanImage({ img_base64: 'base64-image-content' });
 ```
+
+To process asynchronously, pass `callback_url`:
+
+```js
+const result = await client.modal.scanImage({
+  uri: 'https://example.com/image.jpg',
+  callback_url: 'https://example.com/callback',
+  callback_context: { trace_id: 'trace-123' },
+});
+```
+
+**Request fields**
+
+| Field | Type | Required | Description |
+|------|------|------|------|
+| `uri` | `string` | Conditionally required | Image or video URL to scan. Mutually exclusive with `img_base64`; videos must use `uri` |
+| `img_base64` | `string` | Conditionally required | Base64-encoded image content. Mutually exclusive with `uri`; videos are not supported |
+| `is_video` | `boolean` | No | Whether the file is a video. Defaults to `false` |
+| `callback_url` | `string` | Yes for async | Callback URL after detection completes. Only HTTP/HTTPS is supported. Passing this field enables async processing |
+| `callback_context` | `object` | No | Caller passthrough fields. The server does not parse or modify them and returns them unchanged in the callback. Maximum 16KB |
+| `risk_types` | `array[string]` | No | Risk categories to detect. If omitted, all risk types are detected |
+| `detected_age` | `boolean` | No | Whether to perform age detection. Defaults to `false` |
+| `canary` | `string` | No | Canary parameter. Defaults to `B` |
+| `scene` | `string` | No | Scene identifier used for label-level config lookup and metrics |
+| `duration` | `number` | No | Video duration in seconds. Recommended for video scans |
 
 **Pass response example**
 

@@ -87,6 +87,12 @@ export class ModalService {
     if (!body.uri && !body.img_base64) {
       throw new SeaArtError({ kind: ErrGeneral, message: 'uri or img_base64 is required' });
     }
+    if (body.uri && body.img_base64) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'uri and img_base64 are mutually exclusive' });
+    }
+    if (isTruthy(body.is_video) && body.img_base64) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'video scans require uri and do not support img_base64' });
+    }
     const { headers, signal } = splitOptions(options);
     const response = await this.client.request('POST', pathImageScan, body, headers, { signal });
     if (response.status >= 400) {
@@ -153,9 +159,13 @@ function normalizeImageScanRequest(request = {}) {
     ...request,
     uri: trimOptionalString(request.uri ?? request.URI),
     img_base64: trimOptionalString(request.img_base64 ?? request.imgBase64 ?? request.ImgBase64),
+    is_video: request.is_video ?? request.isVideo ?? request.IsVideo,
+    callback_url: request.callback_url ?? request.callbackUrl ?? request.CallbackURL,
+    callback_context: request.callback_context ?? request.callbackContext ?? request.CallbackContext,
     risk_types: request.risk_types ?? request.riskTypes ?? request.RiskTypes,
     detected_age: request.detected_age ?? request.detectedAge ?? request.DetectedAge,
-    is_video: request.is_video ?? request.isVideo ?? request.IsVideo,
+    canary: request.canary ?? request.Canary,
+    scene: request.scene ?? request.Scene,
     duration: request.duration ?? request.Duration,
   });
 }
@@ -208,6 +218,10 @@ function trimOptionalString(value) {
   return trimmed || undefined;
 }
 
+function isTruthy(value) {
+  return value === true || value === 1;
+}
+
 function omitUndefined(value) {
   const output = {};
   for (const [key, item] of Object.entries(value)) {
@@ -222,6 +236,10 @@ function omitUndefined(value) {
   delete output.riskTypes;
   delete output.detectedAge;
   delete output.isVideo;
+  delete output.CallbackURL;
+  delete output.callbackUrl;
+  delete output.CallbackContext;
+  delete output.callbackContext;
   delete output.Text;
   delete output.Scene;
   delete output.AreaTypes;
