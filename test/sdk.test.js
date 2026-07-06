@@ -211,7 +211,12 @@ test('Modal scan APIs normalize Go and JS request field names', async (t) => {
       }
       assert.equal(body.uri, 'https://example.com/image.jpg');
       assert.deepEqual(body.risk_types, [ImageScanRiskTypeErotic, ImageScanRiskTypeViolent]);
-      assert.equal(body.detected_age, 1);
+      assert.equal(body.detected_age, true);
+      assert.equal(body.is_video, false);
+      assert.equal(body.callback_url, 'https://example.com/callback');
+      assert.deepEqual(body.callback_context, { trace_id: 'trace-scan' });
+      assert.equal(body.canary, 'B');
+      assert.equal(body.scene, 'avatar');
       writeJSON(res, 200, { ok: true, nsfw_level: 2, usage: { cost: '0.001' } });
       return;
     }
@@ -274,8 +279,12 @@ test('Modal scan APIs normalize Go and JS request field names', async (t) => {
   const image = await client.modal.scanImage({
     URI: 'https://example.com/image.jpg',
     RiskTypes: [ImageScanRiskTypeErotic, ImageScanRiskTypeViolent],
-    DetectedAge: 1,
-    IsVideo: 0,
+    DetectedAge: true,
+    IsVideo: false,
+    CallbackURL: 'https://example.com/callback',
+    CallbackContext: { trace_id: 'trace-scan' },
+    Canary: 'B',
+    Scene: 'avatar',
   });
   assert.equal(image.ok, true);
   assert.equal(image.nsfw_level, 2);
@@ -283,6 +292,15 @@ test('Modal scan APIs normalize Go and JS request field names', async (t) => {
   const imageBase64 = await client.modal.scanImage({ ImgBase64: 'abc123' });
   assert.equal(imageBase64.ok, true);
   assert.equal(imageBase64.nsfw_level, 0);
+
+  await assert.rejects(
+    () => client.modal.scanImage({ uri: 'https://example.com/image.jpg', img_base64: 'abc123' }),
+    SeaArtError,
+  );
+  await assert.rejects(
+    () => client.modal.scanImage({ img_base64: 'abc123', is_video: true }),
+    SeaArtError,
+  );
 
   const text = await client.modal.scanText({ Text: 'a prompt to check', Scene: 1, AreaTypes: [2], Way: 0 });
   assert.equal(text.status.code, 10000);
