@@ -84,8 +84,8 @@ export class ModalService {
 
   async scanImage(request, ...options) {
     const body = normalizeImageScanRequest(request);
-    if (!body.uri) {
-      throw new SeaArtError({ kind: ErrGeneral, message: 'uri is required' });
+    if (!body.uri && !body.img_base64) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'uri or img_base64 is required' });
     }
     const { headers, signal } = splitOptions(options);
     const response = await this.client.request('POST', pathImageScan, body, headers, { signal });
@@ -151,7 +151,8 @@ export class ModalService {
 function normalizeImageScanRequest(request = {}) {
   return omitUndefined({
     ...request,
-    uri: String(request.uri ?? request.URI ?? '').trim(),
+    uri: trimOptionalString(request.uri ?? request.URI),
+    img_base64: trimOptionalString(request.img_base64 ?? request.imgBase64 ?? request.ImgBase64),
     risk_types: request.risk_types ?? request.riskTypes ?? request.RiskTypes,
     detected_age: request.detected_age ?? request.detectedAge ?? request.DetectedAge,
     is_video: request.is_video ?? request.isVideo ?? request.IsVideo,
@@ -184,8 +185,8 @@ function normalizeTextContentScanRequest(request = {}) {
 function normalizeFaceScanRequest(request = {}) {
   return omitUndefined({
     ...request,
-    uri: String(request.uri ?? request.URI ?? '').trim(),
-    img_base64: String(request.img_base64 ?? request.imgBase64 ?? request.ImgBase64 ?? '').trim(),
+    uri: trimOptionalString(request.uri ?? request.URI),
+    img_base64: trimOptionalString(request.img_base64 ?? request.imgBase64 ?? request.ImgBase64),
     is_video: request.is_video ?? request.isVideo ?? request.IsVideo,
     canary: request.canary ?? request.Canary,
     scene: request.scene ?? request.Scene,
@@ -200,6 +201,11 @@ function normalizeAudioScanRequest(request = {}) {
     rec_type: request.rec_type ?? request.recType ?? request.RecType,
     duration: request.duration ?? request.Duration,
   });
+}
+
+function trimOptionalString(value) {
+  const trimmed = String(value ?? '').trim();
+  return trimmed || undefined;
 }
 
 function omitUndefined(value) {

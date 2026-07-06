@@ -284,7 +284,7 @@ Currently provided:
 
 ## Image/Video Safety Scan
 
-The image/video safety scan API maps to `POST /v1/image/scan` and is used to detect content-safety risks in images, GIFs, or videos. When calling it, provide the media URL to scan and specify the risk types through `risk_types`.
+The image/video safety scan API maps to `POST /v1/image/scan` and is used to detect content-safety risks in images, GIFs, or videos. When calling it, provide either the media URL or base64 image content, and specify the risk types through `risk_types`.
 
 ```js
 import {
@@ -318,6 +318,12 @@ const result = await client.modal.scanImage({
   is_video: 1,
   duration: 12.5,
 });
+```
+
+Base64 image content is also supported:
+
+```js
+const result = await client.modal.scanImage({ img_base64: 'base64-image-content' });
 ```
 
 **Pass response example**

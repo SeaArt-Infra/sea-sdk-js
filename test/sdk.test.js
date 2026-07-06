@@ -203,6 +203,12 @@ test('Modal scan APIs normalize Go and JS request field names', async (t) => {
     const body = await readJSON(req);
 
     if (req.url === '/v1/image/scan') {
+      if (body.img_base64) {
+        assert.equal(body.uri, undefined);
+        assert.equal(body.img_base64, 'abc123');
+        writeJSON(res, 200, { ok: true, nsfw_level: 0, usage: { cost: '0.001' } });
+        return;
+      }
       assert.equal(body.uri, 'https://example.com/image.jpg');
       assert.deepEqual(body.risk_types, [ImageScanRiskTypeErotic, ImageScanRiskTypeViolent]);
       assert.equal(body.detected_age, 1);
@@ -274,6 +280,10 @@ test('Modal scan APIs normalize Go and JS request field names', async (t) => {
   assert.equal(image.ok, true);
   assert.equal(image.nsfw_level, 2);
 
+  const imageBase64 = await client.modal.scanImage({ ImgBase64: 'abc123' });
+  assert.equal(imageBase64.ok, true);
+  assert.equal(imageBase64.nsfw_level, 0);
+
   const text = await client.modal.scanText({ Text: 'a prompt to check', Scene: 1, AreaTypes: [2], Way: 0 });
   assert.equal(text.status.code, 10000);
   assert.deepEqual(text.data.sensitive_words, [{ word: 'blocked', start_index: 2, end_index: 8, risk_type_code: 'political' }]);
@@ -302,7 +312,7 @@ test('Modal scan APIs normalize Go and JS request field names', async (t) => {
   assert.equal(audio.allLabels[0].label1, 'politics');
   assert.equal(audio.usage.cost, '0.001');
   assert.equal(audio.extra.request_id, 'audio-risk-1');
-  assert.deepEqual(seen, ['/v1/image/scan', '/v1/text/scan', '/v1/text/content/scan', '/v1/face/scan', '/v1/audio/scan']);
+  assert.deepEqual(seen, ['/v1/image/scan', '/v1/image/scan', '/v1/text/scan', '/v1/text/content/scan', '/v1/face/scan', '/v1/audio/scan']);
 });
 
 test('Modal wait completes and Task.wait uses attached client', async (t) => {
