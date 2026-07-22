@@ -125,7 +125,7 @@ export class ModalService {
     if (response.status >= 400) {
       throw modalHTTPError(response.status, response.body);
     }
-    return splitExtra(decodeJSON(response.body), ['ok', 'level', 'label', 'reason', 'usage']);
+    return splitExtra(decodeJSON(response.body), ['ok', 'req_id', 'level', 'label', 'reason', 'usage']);
   }
 
   async scanVisualStructuredTextFusion(request, ...options) {
@@ -149,6 +149,7 @@ export class ModalService {
       'text_reason',
       'issue_source',
       'risk_keys',
+      'req_id',
       'msg',
       'usage',
     ]);
