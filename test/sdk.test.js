@@ -246,11 +246,11 @@ test('Modal scan APIs normalize Go and JS request field names', async (t) => {
       assert.equal(body.Scene, undefined);
       writeJSON(res, 200, {
         ok: true,
+        req_id: 'content-risk-1',
         level: 0,
         label: 'normal',
         reason: 'Neutral greeting expression',
         usage: { cost: '0.001' },
-        request_id: 'content-risk-1',
       });
       return;
     }
@@ -311,11 +311,12 @@ test('Modal scan APIs normalize Go and JS request field names', async (t) => {
 
   const textContent = await client.Modal.ScanTextContent({ Text: 'hello world', Canary: 'A', Scene: 'user_name' });
   assert.equal(textContent.ok, true);
+  assert.equal(textContent.req_id, 'content-risk-1');
   assert.equal(textContent.level, 0);
   assert.equal(textContent.label, 'normal');
   assert.equal(textContent.reason, 'Neutral greeting expression');
   assert.equal(textContent.usage.cost, '0.001');
-  assert.equal(textContent.extra.request_id, 'content-risk-1');
+  assert.equal(textContent.extra.req_id, undefined);
 
   const face = await client.modal.scanFace({ URI: 'https://example.com/face.jpg', IsVideo: 0, Scene: 'avatar' });
   assert.equal(face.ok, true);
@@ -354,8 +355,8 @@ test('Modal structured text fusion scan normalizes request and response', async 
       text_reason: 'inappropriate words',
       issue_source: 'both',
       risk_keys: ['description', 'greeting'],
+      req_id: 'fusion-1',
       usage: { cost: '0.001' },
-      request_id: 'fusion-1',
     });
   });
 
@@ -373,8 +374,9 @@ test('Modal structured text fusion scan normalizes request and response', async 
   assert.equal(response.nsfw_level, 2);
   assert.equal(response.issue_source, 'both');
   assert.deepEqual(response.risk_keys, ['description', 'greeting']);
+  assert.equal(response.req_id, 'fusion-1');
   assert.equal(response.usage.cost, '0.001');
-  assert.equal(response.extra.request_id, 'fusion-1');
+  assert.equal(response.extra.req_id, undefined);
 
   await assert.rejects(
     () => client.modal.scanVisualStructuredTextFusion({ text_dict: {} }),

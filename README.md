@@ -436,7 +436,7 @@ const result = await client.modal.scanTextContent({
   scene: 'user_name',
 });
 
-console.log(result.ok, result.level, result.label, result.reason);
+console.log(result.ok, result.req_id, result.level, result.label, result.reason);
 console.log(result.usage);
 ```
 
@@ -445,6 +445,7 @@ console.log(result.usage);
 | Field | Type | Description |
 |------|------|------|
 | `ok` | `boolean` | Whether the review succeeded |
+| `req_id` | `string` | Downstream request ID for tracing; returned for successful reviews and downstream business validation failures |
 | `level` | `number` | Risk level, range `0-6`; higher values indicate higher risk |
 | `label` | `string` | Category label, in English |
 | `reason` | `string` | Decision reason, in English, or error reason |
@@ -456,6 +457,7 @@ console.log(result.usage);
 ```json
 {
   "ok": true,
+  "req_id": "da49eb3d0b4b4d2cb8a64d2c92d70f81",
   "level": 0,
   "label": "normal",
   "reason": "Neutral greeting expression",
@@ -485,7 +487,7 @@ const result = await client.modal.scanVisualStructuredTextFusion({
 });
 
 console.log(result.ok, result.nsfw_level, result.issue_source, result.risk_keys);
-console.log(result.reason, result.img_reason, result.text_reason);
+console.log(result.req_id, result.reason, result.img_reason, result.text_reason);
 console.log(result.usage);
 ```
 
@@ -502,6 +504,22 @@ console.log(result.usage);
 | `canary` | `string` | No | Canary group; downstream default is `A` |
 | `mode` | `string` | No | Detection mode; downstream default is `mixed` |
 | `ocr` | `number` | No | Whether to enable OCR; downstream default is `0` |
+
+**Response fields**
+
+| Field | Type | Description |
+|------|------|------|
+| `ok` | `boolean` | Whether the downstream scan completed successfully |
+| `nsfw_level` | `number` | Highest risk level across the main image, image/text model, and linked images |
+| `reason` | `string` | Combined judgment reason or business validation error |
+| `img_reason` | `string` | Image-side risk reason |
+| `text_reason` | `string` | Text-side risk reason |
+| `issue_source` | `string` | Risk source: `img`, `text`, `both`, or `none` |
+| `risk_keys` | `string[]` | `text_dict` fields that contain risk |
+| `req_id` | `string` | Downstream request ID for tracing, including business validation failures |
+| `msg` | `string` | Downstream service error message |
+| `usage` | `object` | Gateway-injected billing metadata |
+| `extra` | `object` | Upstream fields not modeled by the SDK |
 
 ## Face Scan
 
