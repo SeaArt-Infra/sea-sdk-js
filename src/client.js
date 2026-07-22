@@ -59,6 +59,7 @@ export class Client {
       scanTextContent: 'ScanTextContent',
       scanFace: 'ScanFace',
       scanAudio: 'ScanAudio',
+      scanVisualStructuredTextFusion: 'ScanVisualStructuredTextFusion',
     });
     this.LLM = goStyleService(this.llm, {
       chatCompletions: 'ChatCompletions',
