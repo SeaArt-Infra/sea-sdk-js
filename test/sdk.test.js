@@ -333,6 +333,59 @@ test('Modal scan APIs normalize Go and JS request field names', async (t) => {
   assert.deepEqual(seen, ['/v1/image/scan', '/v1/image/scan', '/v1/text/scan', '/v1/text/content/scan', '/v1/face/scan', '/v1/audio/scan']);
 });
 
+test('Modal structured text fusion scan normalizes request and response', async (t) => {
+  const client = await testClient(t, async (req, res) => {
+    assert.equal(req.method, 'POST');
+    assert.equal(req.url, '/v1/visual/structured/text/fusion/scan');
+    const body = await readJSON(req);
+    assert.equal(body.text_dict.name, '小美');
+    assert.equal(body.uri, 'https://example.com/cover.jpg');
+    assert.equal(body.business_type, 'v1');
+    assert.equal(body.detected_age, 0);
+    assert.equal(body.hash_comparison, 1);
+    assert.equal(body.canary, 'A');
+    assert.equal(body.mode, 'mixed');
+    assert.equal(body.ocr, 1);
+    writeJSON(res, 200, {
+      ok: true,
+      nsfw_level: 2,
+      reason: 'detected risk',
+      img_reason: 'adult content',
+      text_reason: 'inappropriate words',
+      issue_source: 'both',
+      risk_keys: ['description', 'greeting'],
+      usage: { cost: '0.001' },
+      request_id: 'fusion-1',
+    });
+  });
+
+  const response = await client.Modal.ScanVisualStructuredTextFusion({
+    TextDict: { name: '小美', greeting: '你好呀' },
+    URI: 'https://example.com/cover.jpg',
+    BusinessType: 'v1',
+    DetectedAge: 0,
+    HashComparison: 1,
+    Canary: 'A',
+    Mode: 'mixed',
+    OCR: 1,
+  });
+  assert.equal(response.ok, true);
+  assert.equal(response.nsfw_level, 2);
+  assert.equal(response.issue_source, 'both');
+  assert.deepEqual(response.risk_keys, ['description', 'greeting']);
+  assert.equal(response.usage.cost, '0.001');
+  assert.equal(response.extra.request_id, 'fusion-1');
+
+  await assert.rejects(
+    () => client.modal.scanVisualStructuredTextFusion({ text_dict: {} }),
+    SeaArtError,
+  );
+  await assert.rejects(
+    () => client.modal.scanVisualStructuredTextFusion({ text_dict: { name: '小美' } }),
+    SeaArtError,
+  );
+});
+
 test('Modal wait completes and Task.wait uses attached client', async (t) => {
   let polls = 0;
   const client = await testClient(t, async (req, res) => {

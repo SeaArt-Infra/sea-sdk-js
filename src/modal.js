@@ -11,6 +11,7 @@ const pathTextScan = '/v1/text/scan';
 const pathTextContentScan = '/v1/text/content/scan';
 const pathFaceScan = '/v1/face/scan';
 const pathAudioScan = '/v1/audio/scan';
+const pathVisualStructuredTextFusionScan = '/v1/visual/structured/text/fusion/scan';
 const pollNetworkRetryLimit = 3;
 
 export class ModalService {
@@ -127,6 +128,32 @@ export class ModalService {
     return splitExtra(decodeJSON(response.body), ['ok', 'level', 'label', 'reason', 'usage']);
   }
 
+  async scanVisualStructuredTextFusion(request, ...options) {
+    const body = normalizeVisualStructuredTextFusionScanRequest(request);
+    if (!body.text_dict || typeof body.text_dict !== 'object' || Array.isArray(body.text_dict) || Object.keys(body.text_dict).length === 0) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'text_dict is required' });
+    }
+    if (!body.uri && !body.img_base64) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'uri or img_base64 is required' });
+    }
+    const { headers, signal } = splitOptions(options);
+    const response = await this.client.request('POST', pathVisualStructuredTextFusionScan, body, headers, { signal });
+    if (response.status >= 400) {
+      throw modalHTTPError(response.status, response.body);
+    }
+    return splitExtra(decodeJSON(response.body), [
+      'ok',
+      'nsfw_level',
+      'reason',
+      'img_reason',
+      'text_reason',
+      'issue_source',
+      'risk_keys',
+      'msg',
+      'usage',
+    ]);
+  }
+
   async scanFace(request, ...options) {
     const body = normalizeFaceScanRequest(request);
     if (!body.uri && !body.img_base64) {
@@ -192,6 +219,21 @@ function normalizeTextContentScanRequest(request = {}) {
   });
 }
 
+function normalizeVisualStructuredTextFusionScanRequest(request = {}) {
+  return omitUndefined({
+    ...request,
+    text_dict: request.text_dict ?? request.textDict ?? request.TextDict,
+    img_base64: trimOptionalString(request.img_base64 ?? request.imgBase64 ?? request.ImgBase64),
+    uri: trimOptionalString(request.uri ?? request.URI),
+    business_type: request.business_type ?? request.businessType ?? request.BusinessType,
+    detected_age: request.detected_age ?? request.detectedAge ?? request.DetectedAge,
+    hash_comparison: request.hash_comparison ?? request.hashComparison ?? request.HashComparison,
+    canary: request.canary ?? request.Canary,
+    mode: request.mode ?? request.Mode,
+    ocr: request.ocr ?? request.OCR ?? request.Ocr,
+  });
+}
+
 function normalizeFaceScanRequest(request = {}) {
   return omitUndefined({
     ...request,
@@ -252,6 +294,21 @@ function omitUndefined(value) {
   delete output.Canary;
   delete output.Duration;
   delete output.RecType;
+  delete output.TextDict;
+  delete output.textDict;
+  delete output.ImgBase64;
+  delete output.imgBase64;
+  delete output.URI;
+  delete output.BusinessType;
+  delete output.businessType;
+  delete output.DetectedAge;
+  delete output.detectedAge;
+  delete output.HashComparison;
+  delete output.hashComparison;
+  delete output.Canary;
+  delete output.Mode;
+  delete output.OCR;
+  delete output.Ocr;
   delete output.recType;
   return output;
 }
