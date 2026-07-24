@@ -1,0 +1,4 @@
+interface:
+  display_name: "SeaArt JavaScript SDK"
+  short_description: "Build SeaArt AI gateway integrations in JavaScript"
+  default_prompt: "Use $seaart-sdk-js to implement a SeaArt JavaScript SDK integration."
