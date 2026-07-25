@@ -693,6 +693,12 @@ description: Build and troubleshoot SeaArt AI gateway integrations with the sea_
 
 Use `sea_sdk_js` to call the SeaArt unified gateway from an ESM Node.js 18+ project. The SDK uses Promises for requests and async iterables for LLM streaming.
 
+## Install
+
+```bash
+npm install https://github.com/SeaArt-Infra/sea-sdk-js.git
+```
+
 ## Workflow
 
 1. Create one `Client` with the API key and reuse it across requests.
