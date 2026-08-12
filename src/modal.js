@@ -1,5 +1,5 @@
 import { ErrGeneral, ErrNetwork, ErrTaskFailed, ErrTimeout, SeaArtError, newHTTPError, withTaskID } from './errors.js';
-import { applyPollOptions, buildRequestOptions } from './options.js';
+import { applyPollOptions, buildRequestOptions, moveModelToHeader } from './options.js';
 
 const pathGeneration = '/v1/generation';
 const pathPrecharge = '/v1/generation/precharge';
@@ -21,7 +21,8 @@ export class ModalService {
 
   async create(body, ...options) {
     const { headers, signal } = splitOptions(options);
-    const response = await this.client.request('POST', pathGeneration, body, headers, { signal });
+    const request = moveModelToHeader(body, headers);
+    const response = await this.client.request('POST', pathGeneration, request.body, request.headers, { signal });
     if (response.status >= 400) {
       throw modalHTTPError(response.status, response.body);
     }
@@ -41,7 +42,8 @@ export class ModalService {
 
   async precharge(body, ...options) {
     const { headers, signal } = splitOptions(options);
-    const response = await this.client.request('POST', pathPrecharge, body, headers, { signal });
+    const request = moveModelToHeader(body, headers);
+    const response = await this.client.request('POST', pathPrecharge, request.body, request.headers, { signal });
     if (response.status >= 400) {
       throw modalHTTPError(response.status, response.body);
     }

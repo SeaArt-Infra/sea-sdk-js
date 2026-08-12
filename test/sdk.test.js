@@ -57,16 +57,17 @@ test('Modal create submits params body and attaches task client', async (t) => {
     assert.equal(req.url, '/v1/generation');
     assert.equal(req.headers.authorization, 'Bearer test-key');
     assert.equal(req.headers['x-trace-id'], 'trace-123');
+    assert.equal(req.headers['x-model'], 'alibaba_wanx26_i2v_flash');
 
     const body = await readJSON(req);
-    assert.equal(body.model, 'alibaba_wanx26_i2v_flash');
+    assert.equal(body.model, undefined);
     assert.equal(body.moderation, true);
     assert.equal(body.input[0].params.input.prompt, '小狗和女孩在秋天的公园里快乐地玩耍');
     assert.equal(body.input[0].params.parameters.duration, 5);
     writeJSON(res, 200, { id: 'task_create', status: 'in_progress', model: 'alibaba_wanx26_i2v_flash' });
   });
 
-  const task = await client.modal.create({
+  const request = {
     moderation: true,
     model: 'alibaba_wanx26_i2v_flash',
     input: [{
@@ -83,8 +84,10 @@ test('Modal create submits params body and attaches task client', async (t) => {
         },
       },
     }],
-  }, withHeader('X-Trace-Id', 'trace-123'));
+  };
+  const task = await client.modal.create(request, withHeader('X-Trace-Id', 'trace-123'));
 
+  assert.equal(request.model, 'alibaba_wanx26_i2v_flash');
   assert.equal(task.id, 'task_create');
   assert.equal(task.ID, 'task_create');
   assert.equal(task.status, 'in_progress');
@@ -96,9 +99,10 @@ test('Modal precharge returns billing preview', async (t) => {
   const client = await testClient(t, async (req, res) => {
     assert.equal(req.method, 'POST');
     assert.equal(req.url, '/v1/generation/precharge');
+    assert.equal(req.headers['x-model'], 'volces_seedream_4_5');
     const body = await readJSON(req);
     assert.equal(body.id, 'd88pmute87128c73e9r0d0');
-    assert.equal(body.model, 'volces_seedream_4_5');
+    assert.equal(body.model, undefined);
     assert.equal(body.input[0].params.prompt, 'A dog');
     assert.equal(body.moderation, false);
     writeJSON(res, 200, {
@@ -493,18 +497,27 @@ test('LLM non-streaming APIs post to the expected paths', async (t) => {
     paths.push(req.url);
     const body = req.method === 'POST' ? await readJSON(req) : undefined;
     if (req.url === '/chat/completions') {
-      assert.equal(body.model, 'gpt-4o-mini');
+      assert.equal(req.headers['x-model'], 'gpt-4o-mini');
+      assert.equal(body.model, undefined);
       writeJSON(res, 200, { id: 'chat_123', choices: [{ message: { role: 'assistant', content: 'hello' } }] });
     } else if (req.url === '/v1/messages') {
+      assert.equal(req.headers['x-model'], 'claude-3-5-sonnet');
+      assert.equal(body.model, undefined);
       assert.equal(body.max_tokens, 32);
       writeJSON(res, 200, { id: 'msg_123', role: 'assistant', content: [{ type: 'text', text: 'hello from claude' }] });
     } else if (req.url === '/responses') {
+      assert.equal(req.headers['x-model'], 'gpt-4.1-mini');
+      assert.equal(body.model, undefined);
       assert.equal(body.input, 'hello');
       writeJSON(res, 200, { id: 'resp_123', status: 'completed', output: [] });
     } else if (req.url === '/rerank') {
+      assert.equal(req.headers['x-model'], 'qwen3-rerank');
+      assert.equal(body.model, undefined);
       assert.equal(body.query, 'mountain lake');
       writeJSON(res, 200, { id: 'rerank_123', results: [{ index: 1, relevance_score: 0.98 }] });
     } else if (req.url === '/v1/embeddings') {
+      assert.equal(req.headers['x-model'], 'text-embedding-3-small');
+      assert.equal(body.model, undefined);
       assert.equal(body.input, 'hello');
       writeJSON(res, 200, { object: 'list', data: [{ object: 'embedding', index: 0, embedding: [0.1, 0.2] }] });
     } else {
@@ -539,6 +552,18 @@ test('LLM request headers and error classification match Go SDK behavior', async
   );
 });
 
+test('LLM rejects conflicting model and X-Model values', async (t) => {
+  const client = await testClient(t, async () => assert.fail('request should not be sent'));
+
+  await assert.rejects(
+    client.llm.chatCompletions(
+      { model: 'gpt-4o-mini', messages: [] },
+      withHeader('X-Model', 'another-model'),
+    ),
+    /model and X-Model cannot both be set/,
+  );
+});
+
 test('LLM non-streaming methods reject stream=true payloads', async (t) => {
   const client = await testClient(t, async () => assert.fail('request should not be sent'));
 
@@ -560,7 +585,9 @@ test('LLM chat completions stream parses SSE events', async (t) => {
   const client = await testClient(t, async (req, res) => {
     assert.equal(req.method, 'POST');
     assert.equal(req.url, '/chat/completions');
+    assert.equal(req.headers['x-model'], 'gpt-4o-mini');
     const body = await readJSON(req);
+    assert.equal(body.model, undefined);
     assert.equal(body.stream, true);
 
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
