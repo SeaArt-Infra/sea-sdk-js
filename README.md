@@ -178,6 +178,18 @@ const task = await client.modal.create({ model: 'alibaba_wanx26_i2v_flash' });
 const done = await task.wait(withPollInterval(5000));
 ```
 
+When a task fails, `wait()` throws `SeaArtError` with `kind`, `taskID`, the gateway error `code`, and the complete gateway error `message`.
+
+```js
+try {
+  const done = await task.wait(withPollTimeout(300000));
+} catch (error) {
+  if (error instanceof SeaArtError) {
+    console.log(error.kind, error.code, error.message, error.taskID);
+  }
+}
+```
+
 Uppercase aliases are also provided for compatibility with Go-style naming:
 
 ```js

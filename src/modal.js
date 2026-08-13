@@ -36,7 +36,7 @@ export class ModalService {
       id: data.id,
       status: data.status,
       model: data.model,
-      error: data.error,
+      error: normalizeTaskError(data.error),
       client: this.client,
     });
   }
@@ -409,8 +409,19 @@ function newTaskFromResponse(client, data) {
     progress: data.progress ?? 0,
     output: data.output ?? [],
     usage: data.usage,
-    error: data.error,
+    error: normalizeTaskError(data.error),
     client,
+  });
+}
+
+function normalizeTaskError(error) {
+  if (!error || typeof error !== 'object' || Array.isArray(error)) {
+    return undefined;
+  }
+  return omitUndefined({
+    code: error.code,
+    error_message: error.error_message,
+    message: error.message,
   });
 }
 
@@ -442,8 +453,9 @@ async function waitTask(client, taskID, options = []) {
       return task;
     }
     if (status === 'failed') {
-      const suffix = task.error?.error_message ? `: ${task.error.error_message}` : '';
-      throw new SeaArtError({ kind: ErrTaskFailed, message: `task failed${suffix}`, taskID });
+      const detail = task.error?.error_message ?? task.error?.message;
+      const suffix = detail ? `: ${detail}` : '';
+      throw new SeaArtError({ kind: ErrTaskFailed, message: `task failed${suffix}`, taskID, code: task.error?.code });
     }
     await delay(config.interval);
   }
@@ -496,6 +508,8 @@ function modalHTTPError(status, payload) {
     const body = JSON.parse(payload);
     if (body?.error?.error_message) {
       message = body.error.error_message;
+    } else if (body?.error?.message) {
+      message = body.error.message;
     }
   } catch {
     // Keep status text.
