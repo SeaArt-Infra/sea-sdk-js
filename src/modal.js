@@ -6,6 +6,7 @@ const pathPrecharge = '/v1/generation/precharge';
 const pathTask = '/v1/generation/task/';
 const pathModelSkillSearch = '/v1/models/skill/search';
 const pathModelSkill = '/v1/models/skill/';
+const pathTemplateSpecs = '/v1/template/specs';
 const pathImageScan = '/v1/image/scan';
 const pathTextScan = '/v1/text/scan';
 const pathTextContentScan = '/v1/text/content/scan';
@@ -44,6 +45,51 @@ export class ModalService {
     const { headers, signal } = splitOptions(options);
     const request = moveModelToHeader(body, headers);
     const response = await this.client.request('POST', pathPrecharge, request.body, request.headers, { signal });
+    if (response.status >= 400) {
+      throw modalHTTPError(response.status, response.body);
+    }
+    return decodeJSON(response.body);
+  }
+
+  async createComfyUITask({ templateId, inputs, highMemory } = {}, ...options) {
+    const normalizedTemplateID = String(templateId ?? '').trim();
+    if (!normalizedTemplateID) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'templateId is required' });
+    }
+    if (!Array.isArray(inputs) || inputs.length === 0) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'inputs is required' });
+    }
+    const normalizedInputs = inputs.map((input) => {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        throw new SeaArtError({ kind: ErrGeneral, message: 'inputs must contain object values' });
+      }
+      const field = String(input.field ?? '').trim();
+      if (!field) {
+        throw new SeaArtError({ kind: ErrGeneral, message: 'each ComfyUI input requires field' });
+      }
+      if (!Object.prototype.hasOwnProperty.call(input, 'value')) {
+        throw new SeaArtError({ kind: ErrGeneral, message: 'each ComfyUI input requires value' });
+      }
+      return { ...input, field };
+    });
+    const params = {
+      template_id: normalizedTemplateID,
+      inputs: normalizedInputs,
+      ...(highMemory === undefined ? {} : { high_memory: highMemory }),
+    };
+    return this.create({ model: 'comfyui', input: [{ params }] }, ...options);
+  }
+
+  async listComfyUITemplates(templateIds, ...options) {
+    const { headers, signal } = splitOptions(options);
+    const body = { type: 'comfyui' };
+    if (templateIds !== undefined && templateIds !== null) {
+      if (!Array.isArray(templateIds)) {
+        throw new SeaArtError({ kind: ErrGeneral, message: 'templateIds must be an array' });
+      }
+      body.template_ids = templateIds;
+    }
+    const response = await this.client.request('POST', pathTemplateSpecs, body, headers, { signal });
     if (response.status >= 400) {
       throw modalHTTPError(response.status, response.body);
     }

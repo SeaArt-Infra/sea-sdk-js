@@ -16,6 +16,7 @@ Features:
 | Service | Client Field | Capability |
 |------|-------------|------|
 | [Multimodal API](#multimodal-api) | `client.modal` / `client.Modal` | Model listing, parameter details, generation tasks, precharge estimates, and vendor passthrough |
+| [ComfyUI Quick Apps](#comfyui-quick-apps) | `client.modal.createComfyUITask(...)` | Query template parameters, create ComfyUI quick-app tasks, and poll results |
 | [Image/Video Safety Scan](#imagevideo-safety-scan) | `client.modal.scanImage(...)` | Detect content-safety risks in images, GIFs, or videos |
 | [Sensitive-Word Scan](#sensitive-word-scan) | `client.modal.scanText(...)` | Detect sensitive words and combination-rule risks in text |
 | [Text Content Safety Scan](#text-content-safety-scan) | `client.modal.scanTextContent(...)` | Review short text risk level and category label |
@@ -181,6 +182,24 @@ Uppercase aliases are also provided for compatibility with Go-style naming:
 
 ```js
 const task = await client.Modal.Create(body);
+```
+
+### ComfyUI Quick Apps
+
+Pass template IDs to `listComfyUITemplates` to retrieve the corresponding quick-app parameters. `createComfyUITask` fixes the model to `comfyui`, routes it through `X-Model`, and builds the required request envelope.
+
+```js
+const specs = await client.modal.listComfyUITemplates(['d32kq8le878c73876j5g']);
+const task = await client.modal.createComfyUITask({
+  templateId: 'd32kq8le878c73876j5g',
+  inputs: [
+    { field: 'image', value: 'https://image.cdn2.seaart.me/upload/input.webp' },
+    { field: 'select', value: 1 },
+  ],
+  highMemory: true,
+});
+const done = await task.wait(withPollInterval(3000), withPollTimeout(300000));
+console.log(done.urls());
 ```
 
 ### Precharge Estimate
@@ -686,7 +705,7 @@ console.log(text.text());
 >
 ---
 name: seaart-sdk-js
-description: Build and troubleshoot SeaArt AI gateway integrations with the sea_sdk_js client. Use when generating images or videos, searching model skills, estimating multimodal task cost, calling vendor-native passthrough APIs, running media or text safety scans, or using OpenAI- or Anthropic-compatible LLM, streaming, embedding, or rerank APIs from Node.js.
+description: Build and troubleshoot SeaArt AI gateway integrations with the sea_sdk_js client. Use when generating images or videos, calling ComfyUI quick-app templates, searching model skills, estimating multimodal task cost, calling vendor-native passthrough APIs, running media or text safety scans, or using OpenAI- or Anthropic-compatible LLM, streaming, embedding, or rerank APIs from Node.js.
 ---
 
 # SeaArt JavaScript SDK
@@ -762,6 +781,23 @@ for (const output of completed.output) {
 ```
 
 Use `client.modal.precharge(body)` before a generation request when cost estimation is required. Do not assume every model uses the `input` and `parameters` nesting: follow the result from `getModelSkill`.
+
+## ComfyUI Quick Apps
+
+Use `listComfyUITemplates(templateIds)` to retrieve parameters for the supplied template IDs, then call `createComfyUITask({ templateId, inputs, highMemory })` and poll with `task.wait(...)`.
+
+```js
+const task = await client.modal.createComfyUITask({
+  templateId: 'd32kq8le878c73876j5g',
+  inputs: [
+    { field: 'image', value: 'https://image.cdn2.seaart.me/upload/input.webp' },
+    { field: 'select', value: 1 },
+  ],
+  highMemory: true,
+});
+const done = await task.wait(withPollInterval(3000), withPollTimeout(300000));
+console.log(done.urls());
+```
 
 ## LLM And Streaming APIs
 

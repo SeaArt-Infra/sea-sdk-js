@@ -134,6 +134,40 @@ test('Modal precharge returns billing preview', async (t) => {
   assert.equal(resp.data.sample_count, 4);
 });
 
+test('Modal ComfyUI helpers build fixed request shape and query template specs', async (t) => {
+  const client = await testClient(t, async (req, res) => {
+    if (req.url === '/v1/template/specs') {
+      assert.equal(req.method, 'POST');
+      assert.deepEqual(await readJSON(req), { type: 'comfyui', template_ids: ['template-1'] });
+      writeJSON(res, 200, {
+        type: 'comfyui',
+        templates: [{ template_id: 'template-1', inputs: [{ field: 'prompt', required: true, constraints: { default: 'hello' } }], outputs: [{ node_id: '3', node_type: 'SaveImage' }] }],
+      });
+      return;
+    }
+    assert.equal(req.url, '/v1/generation');
+    assert.equal(req.headers['x-model'], 'comfyui');
+    const body = await readJSON(req);
+    assert.equal(body.model, undefined);
+    assert.deepEqual(body.input[0].params, {
+      template_id: 'template-1',
+      high_memory: true,
+      inputs: [{ field: 'prompt', value: 'hello' }],
+    });
+    writeJSON(res, 200, { id: 'task-comfy', status: 'in_progress', model: 'comfyui' });
+  });
+
+  const task = await client.modal.createComfyUITask({
+    templateId: 'template-1',
+    inputs: [{ field: 'prompt', value: 'hello' }],
+    highMemory: true,
+  });
+  assert.equal(task.id, 'task-comfy');
+  const specs = await client.modal.listComfyUITemplates(['template-1']);
+  assert.equal(specs.templates[0].inputs[0].field, 'prompt');
+  assert.equal(specs.templates[0].outputs[0].node_type, 'SaveImage');
+});
+
 test('Modal precharge supports cache miss response', async (t) => {
   const client = await testClient(t, async (req, res) => {
     assert.equal(req.method, 'POST');

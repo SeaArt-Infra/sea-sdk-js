@@ -44,6 +44,19 @@
  */
 
 /**
+ * @typedef {Object} ComfyUIInput
+ * @property {string} field
+ * @property {unknown} value
+ * @property {string} [node_id]
+ */
+
+/**
+ * @typedef {Object} ComfyUITemplateSpecsResponse
+ * @property {string} type
+ * @property {Array<Object>} templates Templates matching the requested template IDs.
+ */
+
+/**
  * @typedef {Object} StreamEvent
  * @property {string} event
  * @property {string|undefined} data
