@@ -6,12 +6,13 @@ export const ErrTaskFailed = 'task_failed';
 export const ErrGeneral = 'general';
 
 export class SeaArtError extends Error {
-  constructor({ kind = ErrGeneral, message = 'SeaArt SDK error', status = 0, taskID = '' } = {}) {
+  constructor({ kind = ErrGeneral, message = 'SeaArt SDK error', status = 0, taskID = '', code = undefined } = {}) {
     super(taskID ? `${message} (task_id: ${taskID})` : message);
     this.name = 'SeaArtError';
     this.kind = kind;
     this.status = status;
     this.taskID = taskID;
+    this.code = code;
     this.Kind = kind;
     this.Status = status;
     this.TaskID = taskID;

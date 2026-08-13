@@ -461,6 +461,32 @@ test('Modal wait returns task_failed errors for failed tasks', async (t) => {
   );
 });
 
+test('Modal wait preserves failed task error message and code', async (t) => {
+  const client = await testClient(t, async (_req, res) => {
+    writeJSON(res, 200, {
+      id: 'task_fail_details',
+      status: 'failed',
+      error: {
+        code: 110001,
+        message: 'input image may contain sensitive information',
+        vendor_response: { http_status: 400, body: { error: { code: 'InvalidParameter' } } },
+      },
+    });
+  });
+
+  const failed = await client.modal.get('task_fail_details');
+  assert.deepEqual(failed.error, { code: 110001, message: 'input image may contain sensitive information' });
+  assert.equal(failed.error.vendor_response, undefined);
+
+  await assert.rejects(
+    client.modal.wait('task_fail_details', withPollInterval(10), withPollTimeout(2000)),
+    (error) => error instanceof SeaArtError
+      && error.kind === ErrTaskFailed
+      && error.code === 110001
+      && error.message === 'task failed: input image may contain sensitive information (task_id: task_fail_details)',
+  );
+});
+
 test('Task builder builds nested params modal request', () => {
   const body = newTask('alibaba_wanx26_i2v_flash')
     .Moderation(true)
