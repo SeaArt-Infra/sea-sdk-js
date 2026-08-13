@@ -48,10 +48,12 @@ export class Client {
 
     this.Modal = goStyleService(this.modal, {
       create: 'Create',
+      createComfyUITask: 'CreateComfyUITask',
       precharge: 'Precharge',
       get: 'Get',
       wait: 'Wait',
       listModels: 'ListModels',
+      listComfyUITemplates: 'ListComfyUITemplates',
       searchModels: 'SearchModels',
       getModelSkill: 'GetModelSkill',
       scanImage: 'ScanImage',
