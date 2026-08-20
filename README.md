@@ -24,6 +24,7 @@ Features:
 | [Face Scan](#face-scan) | `client.modal.scanFace(...)` | Detect face-related results in images or videos |
 | [Audio Scan](#audio-scan) | `client.modal.scanAudio(...)` | Detect audio content risks |
 | [LLM API](#llm-api) | `client.llm` / `client.LLM` | OpenAI / Anthropic / Responses / Embeddings / Rerank compatible APIs |
+| [Billing API](#billing-api) | `client.billing` / `client.Billing` | Query the authenticated team's cost statement |
 
 ## Installation
 
@@ -54,7 +55,29 @@ const client = new Client({
 });
 ```
 
-Configure the unified gateway address through `baseURL`; the SDK uses it to call multimodal, LLM, passthrough, and other capabilities.
+## Billing API
+
+`client.billing.query(...)` calls `GET /monitor/api/v1/cost/billing`. The gateway derives the team from the Bearer token and injects `X-User-ID`; callers do not pass a team identifier. By default the query covers `develop` and `release`. Set `environment` to `develop` or `release` to select one environment.
+
+`start` and `end` define the time range. They accept RFC3339 timestamps such as `2026-08-19T00:00:00Z`, UTC date-times without a zone, date-only values such as `2026-08-19`, or Unix seconds. The range is `[start, end)`. When `end` is date-only, that whole day is included; without either value, the server defaults to the previous seven days.
+
+```js
+const statement = await client.billing.query({
+  start: '2026-08-19T00:00:00Z',
+  end: '2026-08-20T00:00:00Z',
+  environment: 'release',
+  page: 1,
+  page_size: 20,
+});
+console.log(statement.team, statement.summary.total_cost);
+for (const item of statement.items.items ?? []) {
+  console.log(item.provider, item.model_group, item.total_cost);
+}
+```
+
+Set `billingBaseURL` only when the billing route is hosted separately; otherwise `baseURL` derives it as `<baseURL>/monitor`.
+
+Configure the unified gateway address through `baseURL`; the SDK uses it to call multimodal, LLM, billing, passthrough, and other capabilities.
 
 ```js
 const client = new Client({
@@ -733,7 +756,7 @@ npm install https://github.com/SeaArt-Infra/sea-sdk-js.git
 ## Workflow
 
 1. Create one `Client` with the API key and reuse it across requests.
-2. Select `client.modal` for generation, model skills, precharge, or safety scans; `client.llm` for LLM APIs; and `client.passthrough` for vendor-native paths.
+2. Select `client.modal` for generation, model skills, precharge, or safety scans; `client.billing` for team-scoped cost statements; `client.llm` for LLM APIs; and `client.passthrough` for vendor-native paths.
 3. For a multimodal model, retrieve `client.modal.getModelSkill(model)` before building model-specific parameters.
 4. Poll generation tasks with `task.wait(...)`, then inspect `task.output` after completion.
 5. Decode successful LLM JSON strings with `decode`; catch `SeaArtError` at the request boundary.
@@ -793,6 +816,11 @@ for (const output of completed.output) {
 ```
 
 Use `client.modal.precharge(body)` before a generation request when cost estimation is required. Do not assume every model uses the `input` and `parameters` nesting: follow the result from `getModelSkill`.
+
+## Billing Queries
+
+Use `client.billing.query({...})` for the authenticated team's cost statement. The gateway derives the team from the Bearer token, so callers must not pass `team_alias`. The default environment scope is `develop` plus `release`; set `environment` to one of those values to select a single environment. Use `start`, `end`, `provider`, `credential_name`, `model_group`, `page`, and `page_size` for supported filters.
+Use RFC3339 or date-only values for `start`/`end`; the range is `[start, end)`, and omitted values default to the previous seven days.
 
 ## ComfyUI Quick Apps
 

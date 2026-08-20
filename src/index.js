@@ -6,9 +6,11 @@ export {
   defaultModelBaseURL,
   defaultLLMBaseURL,
   defaultPassthroughBaseURL,
+  defaultBillingBaseURL,
   defaultTimeout,
   sdkVersion,
 } from './client.js';
+export { BillingService } from './billing.js';
 export {
   SeaArtError as Error,
   SeaArtError,

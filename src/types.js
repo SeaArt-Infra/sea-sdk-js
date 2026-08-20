@@ -17,6 +17,7 @@
  * @property {string} [modelBaseURL]
  * @property {string} [llmBaseURL]
  * @property {string} [passthroughBaseURL]
+ * @property {string} [billingBaseURL]
  * @property {string} [project]
  * @property {number} [timeout] Timeout in milliseconds.
  * @property {typeof fetch} [fetch] Custom fetch implementation.
