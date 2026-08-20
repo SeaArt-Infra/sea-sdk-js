@@ -51,6 +51,35 @@ test('Client rejects invalid base URL', () => {
   assert.throws(() => new Client({ baseURL: '://bad' }), SeaArtError);
 });
 
+test('Billing query uses the monitor endpoint and decodes the envelope', async () => {
+  let request;
+  const client = new Client({
+    apiKey: 'test-key',
+    billingBaseURL: 'https://billing.example.com',
+    fetch: async (url, options) => {
+      request = { url, options };
+      return new Response(JSON.stringify({
+        code: 0,
+        message: 'ok',
+        data: {
+          team: 'SeaComfyui',
+          environments: ['release'],
+          summary: { total_requests: 3, total_cost: '1.25', currency: 'USD' },
+          items: { items: [], total: 0, page: 1, page_size: 20, total_pages: 0 },
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    },
+  });
+
+  const response = await client.billing.query({ environment: 'release', page: 2, page_size: 10 });
+  assert.equal(new URL(request.url).pathname, '/api/v1/cost/billing');
+  assert.equal(new URL(request.url).search, '?environment=release&page=2&page_size=10');
+  assert.equal(request.options.headers.get('Authorization'), 'Bearer test-key');
+  assert.equal(response.team, 'SeaComfyui');
+  assert.equal(response.summary.total_cost, '1.25');
+  assert.equal(client.Billing.Query, client.billing.Query);
+});
+
 test('Modal create submits params body and attaches task client', async (t) => {
   const client = await testClient(t, async (req, res) => {
     assert.equal(req.method, 'POST');

@@ -3,11 +3,13 @@ import { TransportClient } from './transport.js';
 import { ModalService } from './modal.js';
 import { LLMService } from './llm.js';
 import { PassthroughService } from './passthrough.js';
+import { BillingService } from './billing.js';
 
 export const defaultBaseURL = 'https://gateway.example.com';
 export const defaultModelBaseURL = `${defaultBaseURL}/model`;
 export const defaultLLMBaseURL = `${defaultBaseURL}/llm`;
 export const defaultPassthroughBaseURL = defaultModelBaseURL;
+export const defaultBillingBaseURL = `${defaultBaseURL}/monitor`;
 export const defaultTimeout = 5 * 60 * 1000;
 export const sdkVersion = '0.1.0';
 
@@ -21,6 +23,7 @@ export class Client {
     this.modelBaseURL = endpoints.model;
     this.llmBaseURL = endpoints.llm;
     this.passthroughBaseURL = endpoints.passthrough;
+    this.billingBaseURL = endpoints.billing;
     this.project = config.project ?? config.Project ?? '';
 
     const shared = {
@@ -43,6 +46,11 @@ export class Client {
     this.passthrough = new PassthroughService(new TransportClient({
       ...shared,
       baseURL: this.passthroughBaseURL,
+      userAgent: `seaart-sdk-js/${sdkVersion}`,
+    }));
+    this.billing = new BillingService(new TransportClient({
+      ...shared,
+      baseURL: this.billingBaseURL,
       userAgent: `seaart-sdk-js/${sdkVersion}`,
     }));
 
@@ -82,6 +90,7 @@ export class Client {
       put: 'Put',
       delete: 'Delete',
     });
+    this.Billing = goStyleService(this.billing, { query: 'Query', get: 'Get' });
   }
 }
 
@@ -98,7 +107,8 @@ export function resolveEndpoints(config = {}) {
   const model = resolveServiceURL(config.modelBaseURL ?? config.ModelBaseURL ?? '', hasBaseURL, root, 'model', defaultModelBaseURL);
   const llm = resolveServiceURL(config.llmBaseURL ?? config.LLMBaseURL ?? '', hasBaseURL, root, 'llm', defaultLLMBaseURL);
   const passthrough = resolvePassthroughURL(config.passthroughBaseURL ?? config.PassthroughBaseURL ?? '', model);
-  return { root, model, llm, passthrough };
+  const billing = resolveServiceURL(config.billingBaseURL ?? config.BillingBaseURL ?? '', hasBaseURL, root, 'monitor', defaultBillingBaseURL);
+  return { root, model, llm, passthrough, billing };
 }
 
 function resolveRootURL(raw) {
