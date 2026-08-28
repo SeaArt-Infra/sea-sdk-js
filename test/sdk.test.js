@@ -455,6 +455,46 @@ test('Modal structured text fusion scan normalizes request and response', async 
   );
 });
 
+test('Modal character quality scan posts flat copy fields', async (t) => {
+  const client = await testClient(t, async (req, res) => {
+    assert.equal(req.method, 'POST');
+    assert.equal(req.url, '/v1/char/quality/scan');
+    assert.equal(req.headers.authorization, 'Bearer test-key');
+    assert.deepEqual(await readJSON(req), {
+      name: 'Xiaomei',
+      first_msg: 'Hello.',
+      description: 'A thoughtful friend.',
+      scenario: 'A cafe on a rainy day.',
+      example_dialogue: 'A: Hello\nB: Welcome.',
+    });
+    writeJSON(res, 200, {
+      ok: true,
+      level: 'A',
+      safety_tag: { tag: 'normal' },
+      usage: { cost: '0.001' },
+      request_id: 'character-quality-1',
+    });
+  });
+
+  const response = await client.Modal.ScanCharacterQuality({
+    Name: 'Xiaomei',
+    FirstMsg: 'Hello.',
+    Description: 'A thoughtful friend.',
+    Scenario: 'A cafe on a rainy day.',
+    ExampleDialogue: 'A: Hello\nB: Welcome.',
+  });
+  assert.equal(response.ok, true);
+  assert.equal(response.level, 'A');
+  assert.equal(response.safety_tag.tag, 'normal');
+  assert.equal(response.usage.cost, '0.001');
+  assert.equal(response.extra.request_id, 'character-quality-1');
+
+  await assert.rejects(
+    () => client.modal.scanCharacterQuality({ name: 'Xiaomei', level: 1 }),
+    SeaArtError,
+  );
+});
+
 test('Modal wait completes and Task.wait uses attached client', async (t) => {
   let polls = 0;
   const client = await testClient(t, async (req, res) => {

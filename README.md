@@ -20,6 +20,7 @@ Features:
 | [Image/Video Safety Scan](#imagevideo-safety-scan) | `client.modal.scanImage(...)` | Detect content-safety risks in images, GIFs, or videos |
 | [Sensitive-Word Scan](#sensitive-word-scan) | `client.modal.scanText(...)` | Detect sensitive words and combination-rule risks in text |
 | [Text Content Safety Scan](#text-content-safety-scan) | `client.modal.scanTextContent(...)` | Review short text risk level and category label |
+| [Character Quality Scan](#character-quality-scan) | `client.modal.scanCharacterQuality(...)` | Review character copy quality and safety |
 | [Visual Structured Text Fusion Scan](#visual-structured-text-fusion-scan) | `client.modal.scanVisualStructuredTextFusion(...)` | Scan digital-human cover images and structured copy together |
 | [Face Scan](#face-scan) | `client.modal.scanFace(...)` | Detect face-related results in images or videos |
 | [Audio Scan](#audio-scan) | `client.modal.scanAudio(...)` | Detect audio content risks |
@@ -520,6 +521,32 @@ console.log(result.usage);
   }
 }
 ```
+
+## Character Quality Scan
+
+The character quality scan endpoint is `POST /v1/char/quality/scan`. It reviews character-copy quality and safety, returning a grade such as `S`, `A+`, `A`, `B`, or `C`, plus the safety result. The request body is a flat JSON object: use either the production-line A fields (`first_msg`, `description`, `scenario`, `example_dialogue`) or the production-line B fields (`opening_line`, `character_introduction`, `scenario_setting`, `dialogue_examples`, `personality_setting`). All submitted values must be strings.
+
+```js
+const result = await client.modal.scanCharacterQuality({
+  name: 'Xiaomei',
+  firstMsg: 'Hello, I am Xiaomei.',
+  description: 'A thoughtful friend who enjoys painting.',
+  scenario: 'A cafe on a rainy day.',
+  exampleDialogue: 'A: Hello\nB: Welcome.',
+});
+
+console.log(result.ok, result.level, result.safety_tag.tag);
+console.log(result.safety_tag.fields, result.usage.cost);
+```
+
+| Request field | Production line | Description |
+|------|------|------|
+| `name` | A / B | Character name |
+| `first_msg` / `firstMsg`, `description`, `scenario`, `example_dialogue` / `exampleDialogue` | A | Opening message, description, scenario, and dialogue example |
+| `opening_line` / `openingLine`, `character_introduction` / `characterIntroduction`, `scenario_setting` / `scenarioSetting`, `dialogue_examples` / `dialogueExamples` | B | Opening message, description, scenario, and dialogue example |
+| `personality_setting` / `personalitySetting` | B | Optional personality setting |
+
+`safety_tag.tag` is normally `normal` when no safety rule matches. `safety_tag.fields` contains field-level matches using the original request field names and may be omitted or empty. `usage.cost` is the gateway-injected charge for the call. Unmodeled response fields remain available in `result.extra`.
 
 ## Visual Structured Text Fusion Scan
 
