@@ -15,6 +15,21 @@ const pathFaceScan = '/v1/face/scan';
 const pathAudioScan = '/v1/audio/scan';
 const pathVisualStructuredTextFusionScan = '/v1/visual/structured/text/fusion/scan';
 const pollNetworkRetryLimit = 3;
+const characterQualityScanFields = new Set([
+  'name', 'Name',
+  'first_msg', 'firstMsg', 'FirstMsg',
+  'description', 'Description',
+  'scenario', 'Scenario',
+  'example_dialogue', 'exampleDialogue', 'ExampleDialogue',
+  'opening_line', 'openingLine', 'OpeningLine',
+  'character_introduction', 'characterIntroduction', 'CharacterIntroduction',
+  'scenario_setting', 'scenarioSetting', 'ScenarioSetting',
+  'dialogue_examples', 'dialogueExamples', 'DialogueExamples',
+  'personality_setting', 'personalitySetting', 'PersonalitySetting',
+]);
+const characterQualityScanLineAFields = ['name', 'first_msg', 'description', 'scenario', 'example_dialogue'];
+const characterQualityScanLineBFields = ['name', 'opening_line', 'character_introduction', 'scenario_setting', 'dialogue_examples'];
+const characterQualityScanLineBOnlyFields = ['opening_line', 'character_introduction', 'scenario_setting', 'dialogue_examples', 'personality_setting'];
 
 export class ModalService {
   constructor(client) {
@@ -283,19 +298,7 @@ function normalizeCharacterQualityScanRequest(request = {}) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan request must be an object' });
   }
-  const allowedFields = new Set([
-    'name', 'Name',
-    'first_msg', 'firstMsg', 'FirstMsg',
-    'description', 'Description',
-    'scenario', 'Scenario',
-    'example_dialogue', 'exampleDialogue', 'ExampleDialogue',
-    'opening_line', 'openingLine', 'OpeningLine',
-    'character_introduction', 'characterIntroduction', 'CharacterIntroduction',
-    'scenario_setting', 'scenarioSetting', 'ScenarioSetting',
-    'dialogue_examples', 'dialogueExamples', 'DialogueExamples',
-    'personality_setting', 'personalitySetting', 'PersonalitySetting',
-  ]);
-  const unknownField = Object.keys(request).find((key) => !allowedFields.has(key));
+  const unknownField = Object.keys(request).find((key) => !characterQualityScanFields.has(key));
   if (unknownField) {
     throw new SeaArtError({ kind: ErrGeneral, message: `unsupported character quality scan field: ${unknownField}` });
   }
@@ -316,10 +319,24 @@ function normalizeCharacterQualityScanRequest(request = {}) {
     if (value === undefined || value === null) {
       continue;
     }
-    if (typeof value !== 'string') {
-      throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan fields must be strings' });
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan fields must be non-empty strings' });
     }
     body[key] = value;
+  }
+
+  const hasLineAField = characterQualityScanLineAFields.some((key) => key !== 'name' && body[key] !== undefined);
+  const hasLineBField = characterQualityScanLineBOnlyFields.some((key) => body[key] !== undefined);
+  if (hasLineAField && hasLineBField) {
+    throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan request must use either production-line A or B fields' });
+  }
+  const requiredFields = hasLineAField ? characterQualityScanLineAFields : hasLineBField ? characterQualityScanLineBFields : undefined;
+  if (!requiredFields) {
+    throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan request must include a complete production-line A or B field set' });
+  }
+  const missingFields = requiredFields.filter((key) => body[key] === undefined);
+  if (missingFields.length > 0) {
+    throw new SeaArtError({ kind: ErrGeneral, message: `character quality scan request is missing required fields: ${missingFields.join(', ')}` });
   }
   return body;
 }

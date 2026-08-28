@@ -524,7 +524,7 @@ console.log(result.usage);
 
 ## Character Quality Scan
 
-The character quality scan endpoint is `POST /v1/char/quality/scan`. It reviews character-copy quality and safety, returning a grade such as `S`, `A+`, `A`, `B`, or `C`, plus the safety result. The request body is a flat JSON object: use either the production-line A fields (`first_msg`, `description`, `scenario`, `example_dialogue`) or the production-line B fields (`opening_line`, `character_introduction`, `scenario_setting`, `dialogue_examples`, `personality_setting`). All submitted values must be strings.
+The character quality scan endpoint is `POST /v1/char/quality/scan`. It reviews character-copy quality and safety, returning a grade such as `S`, `A+`, `A`, `B`, or `C`, plus the safety result. The request body is a flat JSON object: provide a complete production-line A set (`name`, `first_msg`, `description`, `scenario`, `example_dialogue`) or production-line B set (`name`, `opening_line`, `character_introduction`, `scenario_setting`, `dialogue_examples`). `personality_setting` is optional for production-line B. All values must be non-empty strings, and the two production-line field sets cannot be mixed.
 
 ```js
 const result = await client.modal.scanCharacterQuality({
