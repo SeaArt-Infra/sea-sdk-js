@@ -455,6 +455,119 @@ test('Modal structured text fusion scan normalizes request and response', async 
   );
 });
 
+test('Modal character quality scan posts flat copy fields', async (t) => {
+  const client = await testClient(t, async (req, res) => {
+    assert.equal(req.method, 'POST');
+    assert.equal(req.url, '/v1/char/quality/scan');
+    assert.equal(req.headers.authorization, 'Bearer test-key');
+    assert.deepEqual(await readJSON(req), {
+      name: 'Xiaomei',
+      first_msg: 'Hello.',
+      description: 'A thoughtful friend.',
+      scenario: 'A cafe on a rainy day.',
+      example_dialogue: 'A: Hello\nB: Welcome.',
+    });
+    writeJSON(res, 200, {
+      ok: true,
+      level: 'A',
+      safety_tag: { tag: 'normal' },
+      usage: { cost: '0.001' },
+      request_id: 'character-quality-1',
+    });
+  });
+
+  const response = await client.Modal.ScanCharacterQuality({
+    Name: 'Xiaomei',
+    FirstMsg: 'Hello.',
+    Description: 'A thoughtful friend.',
+    Scenario: 'A cafe on a rainy day.',
+    ExampleDialogue: 'A: Hello\nB: Welcome.',
+  });
+  assert.equal(response.ok, true);
+  assert.equal(response.level, 'A');
+  assert.equal(response.safety_tag.tag, 'normal');
+  assert.equal(response.usage.cost, '0.001');
+  assert.equal(response.extra.request_id, 'character-quality-1');
+
+});
+
+test('Modal character quality scan accepts a complete production-line B field set', async (t) => {
+  const client = await testClient(t, async (req, res) => {
+    assert.equal(req.method, 'POST');
+    assert.equal(req.url, '/v1/char/quality/scan');
+    assert.deepEqual(await readJSON(req), {
+      name: 'Xiaomei',
+      opening_line: 'Hello.',
+      character_introduction: 'A thoughtful friend.',
+      scenario_setting: 'A cafe on a rainy day.',
+      dialogue_examples: 'A: Hello\nB: Welcome.',
+      personality_setting: 'Warm and observant.',
+    });
+    writeJSON(res, 200, { ok: true, level: 'A' });
+  });
+
+  const response = await client.modal.scanCharacterQuality({
+    name: 'Xiaomei',
+    openingLine: 'Hello.',
+    characterIntroduction: 'A thoughtful friend.',
+    scenarioSetting: 'A cafe on a rainy day.',
+    dialogueExamples: 'A: Hello\nB: Welcome.',
+    personalitySetting: 'Warm and observant.',
+  });
+  assert.equal(response.ok, true);
+  assert.equal(response.level, 'A');
+});
+
+test('Modal character quality scan validates request fields before sending a request', async () => {
+  let fetchCalls = 0;
+  const client = new Client({
+    apiKey: 'test-key',
+    fetch: async () => {
+      fetchCalls += 1;
+      throw new Error('fetch must not be called for invalid input');
+    },
+  });
+
+  await assert.rejects(
+    () => client.modal.scanCharacterQuality({ name: 'Xiaomei', level: 1 }),
+    (error) => error instanceof SeaArtError && error.message === 'unsupported character quality scan field: level',
+  );
+  await assert.rejects(
+    () => client.modal.scanCharacterQuality({}),
+    (error) => error instanceof SeaArtError && error.message === 'character quality scan request must include a complete production-line A or B field set',
+  );
+  await assert.rejects(
+    () => client.modal.scanCharacterQuality({
+      name: 'Xiaomei',
+      firstMsg: 'Hello.',
+      description: 'A thoughtful friend.',
+    }),
+    (error) => error instanceof SeaArtError && error.message === 'character quality scan request is missing required fields: scenario, example_dialogue',
+  );
+  await assert.rejects(
+    () => client.modal.scanCharacterQuality({
+      name: 'Xiaomei',
+      firstMsg: 'Hello.',
+      description: 'A thoughtful friend.',
+      scenario: 'A cafe on a rainy day.',
+      exampleDialogue: 'A: Hello\\nB: Welcome.',
+      openingLine: 'Hello.',
+    }),
+    (error) => error instanceof SeaArtError && error.message === 'character quality scan request must use either production-line A or B fields',
+  );
+  await assert.rejects(
+    () => client.modal.scanCharacterQuality({
+      name: 'Xiaomei',
+      firstMsg: '   ',
+      description: 'A thoughtful friend.',
+      scenario: 'A cafe on a rainy day.',
+      exampleDialogue: 'A: Hello\\nB: Welcome.',
+    }),
+    (error) => error instanceof SeaArtError && error.message === 'character quality scan fields must be non-empty strings',
+  );
+  assert.equal(fetchCalls, 0);
+});
+
 test('Modal wait completes and Task.wait uses attached client', async (t) => {
   let polls = 0;
   const client = await testClient(t, async (req, res) => {

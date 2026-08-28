@@ -10,10 +10,26 @@ const pathTemplateSpecs = '/v1/template/specs';
 const pathImageScan = '/v1/image/scan';
 const pathTextScan = '/v1/text/scan';
 const pathTextContentScan = '/v1/text/content/scan';
+const pathCharacterQualityScan = '/v1/char/quality/scan';
 const pathFaceScan = '/v1/face/scan';
 const pathAudioScan = '/v1/audio/scan';
 const pathVisualStructuredTextFusionScan = '/v1/visual/structured/text/fusion/scan';
 const pollNetworkRetryLimit = 3;
+const characterQualityScanFields = new Set([
+  'name', 'Name',
+  'first_msg', 'firstMsg', 'FirstMsg',
+  'description', 'Description',
+  'scenario', 'Scenario',
+  'example_dialogue', 'exampleDialogue', 'ExampleDialogue',
+  'opening_line', 'openingLine', 'OpeningLine',
+  'character_introduction', 'characterIntroduction', 'CharacterIntroduction',
+  'scenario_setting', 'scenarioSetting', 'ScenarioSetting',
+  'dialogue_examples', 'dialogueExamples', 'DialogueExamples',
+  'personality_setting', 'personalitySetting', 'PersonalitySetting',
+]);
+const characterQualityScanLineAFields = ['name', 'first_msg', 'description', 'scenario', 'example_dialogue'];
+const characterQualityScanLineBFields = ['name', 'opening_line', 'character_introduction', 'scenario_setting', 'dialogue_examples'];
+const characterQualityScanLineBOnlyFields = ['opening_line', 'character_introduction', 'scenario_setting', 'dialogue_examples', 'personality_setting'];
 
 export class ModalService {
   constructor(client) {
@@ -176,6 +192,16 @@ export class ModalService {
     return splitExtra(decodeJSON(response.body), ['ok', 'req_id', 'level', 'label', 'reason', 'usage']);
   }
 
+  async scanCharacterQuality(request, ...options) {
+    const body = normalizeCharacterQualityScanRequest(request);
+    const { headers, signal } = splitOptions(options);
+    const response = await this.client.request('POST', pathCharacterQualityScan, body, headers, { signal });
+    if (response.status >= 400) {
+      throw modalHTTPError(response.status, response.body);
+    }
+    return splitExtra(decodeJSON(response.body), ['ok', 'level', 'safety_tag', 'usage']);
+  }
+
   async scanVisualStructuredTextFusion(request, ...options) {
     const body = normalizeVisualStructuredTextFusionScanRequest(request);
     if (!body.text_dict || typeof body.text_dict !== 'object' || Array.isArray(body.text_dict) || Object.keys(body.text_dict).length === 0) {
@@ -266,6 +292,53 @@ function normalizeTextContentScanRequest(request = {}) {
     canary: request.canary ?? request.Canary,
     scene: request.scene ?? request.Scene,
   });
+}
+
+function normalizeCharacterQualityScanRequest(request = {}) {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) {
+    throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan request must be an object' });
+  }
+  const unknownField = Object.keys(request).find((key) => !characterQualityScanFields.has(key));
+  if (unknownField) {
+    throw new SeaArtError({ kind: ErrGeneral, message: `unsupported character quality scan field: ${unknownField}` });
+  }
+  const fields = {
+    name: request.name ?? request.Name,
+    first_msg: request.first_msg ?? request.firstMsg ?? request.FirstMsg,
+    description: request.description ?? request.Description,
+    scenario: request.scenario ?? request.Scenario,
+    example_dialogue: request.example_dialogue ?? request.exampleDialogue ?? request.ExampleDialogue,
+    opening_line: request.opening_line ?? request.openingLine ?? request.OpeningLine,
+    character_introduction: request.character_introduction ?? request.characterIntroduction ?? request.CharacterIntroduction,
+    scenario_setting: request.scenario_setting ?? request.scenarioSetting ?? request.ScenarioSetting,
+    dialogue_examples: request.dialogue_examples ?? request.dialogueExamples ?? request.DialogueExamples,
+    personality_setting: request.personality_setting ?? request.personalitySetting ?? request.PersonalitySetting,
+  };
+  const body = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan fields must be non-empty strings' });
+    }
+    body[key] = value;
+  }
+
+  const hasLineAField = characterQualityScanLineAFields.some((key) => key !== 'name' && body[key] !== undefined);
+  const hasLineBField = characterQualityScanLineBOnlyFields.some((key) => body[key] !== undefined);
+  if (hasLineAField && hasLineBField) {
+    throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan request must use either production-line A or B fields' });
+  }
+  const requiredFields = hasLineAField ? characterQualityScanLineAFields : hasLineBField ? characterQualityScanLineBFields : undefined;
+  if (!requiredFields) {
+    throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan request must include a complete production-line A or B field set' });
+  }
+  const missingFields = requiredFields.filter((key) => body[key] === undefined);
+  if (missingFields.length > 0) {
+    throw new SeaArtError({ kind: ErrGeneral, message: `character quality scan request is missing required fields: ${missingFields.join(', ')}` });
+  }
+  return body;
 }
 
 function normalizeVisualStructuredTextFusionScanRequest(request = {}) {

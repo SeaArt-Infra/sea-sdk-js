@@ -130,7 +130,7 @@ Use `client.llm.messages` / `messagesStream` for Anthropic Messages and `respons
 
 Use passthrough only for a vendor-native path such as `/kling/...`, `/vidu/...`, or `/google/...`; pass a relative path and preserve the returned status, headers, and raw body.
 
-Use the dedicated scan methods for image/video, face, audio, sensitive-word, short-text, or visual-and-structured-text checks. Image and face scans accept either `uri` or `img_base64`; video and audio scans require `uri`.
+Use the dedicated scan methods for image/video, face, audio, sensitive-word, short-text, character-copy quality, or visual-and-structured-text checks. Image and face scans accept either `uri` or `img_base64`; video and audio scans require `uri`. Character quality scans use `client.modal.scanCharacterQuality(...)` with a flat production-line A or B field set.
 
 ```js
 import { ErrAuth, ErrQuota, ErrTimeout, SeaArtError } from 'sea_sdk_js';

@@ -67,6 +67,7 @@ export class Client {
       scanImage: 'ScanImage',
       scanText: 'ScanText',
       scanTextContent: 'ScanTextContent',
+      scanCharacterQuality: 'ScanCharacterQuality',
       scanFace: 'ScanFace',
       scanAudio: 'ScanAudio',
       scanVisualStructuredTextFusion: 'ScanVisualStructuredTextFusion',
