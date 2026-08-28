@@ -283,6 +283,22 @@ function normalizeCharacterQualityScanRequest(request = {}) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     throw new SeaArtError({ kind: ErrGeneral, message: 'character quality scan request must be an object' });
   }
+  const allowedFields = new Set([
+    'name', 'Name',
+    'first_msg', 'firstMsg', 'FirstMsg',
+    'description', 'Description',
+    'scenario', 'Scenario',
+    'example_dialogue', 'exampleDialogue', 'ExampleDialogue',
+    'opening_line', 'openingLine', 'OpeningLine',
+    'character_introduction', 'characterIntroduction', 'CharacterIntroduction',
+    'scenario_setting', 'scenarioSetting', 'ScenarioSetting',
+    'dialogue_examples', 'dialogueExamples', 'DialogueExamples',
+    'personality_setting', 'personalitySetting', 'PersonalitySetting',
+  ]);
+  const unknownField = Object.keys(request).find((key) => !allowedFields.has(key));
+  if (unknownField) {
+    throw new SeaArtError({ kind: ErrGeneral, message: `unsupported character quality scan field: ${unknownField}` });
+  }
   const fields = {
     name: request.name ?? request.Name,
     first_msg: request.first_msg ?? request.firstMsg ?? request.FirstMsg,

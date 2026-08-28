@@ -489,10 +489,23 @@ test('Modal character quality scan posts flat copy fields', async (t) => {
   assert.equal(response.usage.cost, '0.001');
   assert.equal(response.extra.request_id, 'character-quality-1');
 
+});
+
+test('Modal character quality scan rejects unknown fields before sending a request', async () => {
+  let fetchCalls = 0;
+  const client = new Client({
+    apiKey: 'test-key',
+    fetch: async () => {
+      fetchCalls += 1;
+      throw new Error('fetch must not be called for invalid input');
+    },
+  });
+
   await assert.rejects(
     () => client.modal.scanCharacterQuality({ name: 'Xiaomei', level: 1 }),
-    SeaArtError,
+    (error) => error instanceof SeaArtError && error.message === 'unsupported character quality scan field: level',
   );
+  assert.equal(fetchCalls, 0);
 });
 
 test('Modal wait completes and Task.wait uses attached client', async (t) => {
