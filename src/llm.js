@@ -1,5 +1,5 @@
 import { ErrGeneral, ErrNetwork, SeaArtError, newHTTPError } from './errors.js';
-import { buildRequestOptions, moveModelToHeader } from './options.js';
+import { buildRequestOptions, keepModelInBody } from './options.js';
 
 const pathChatCompletions = '/chat/completions';
 const pathMessages = '/v1/messages';
@@ -148,7 +148,9 @@ export class ResponsesStreamTextAssembler {
 
 async function doRawJSON(client, method, path, body, options = []) {
   const { headers, signal } = splitOptions(options);
-  const request = body === undefined ? { body, headers } : moveModelToHeader(body, headers);
+  const request = body === undefined
+    ? { body, headers: keepModelInBody({}, headers).headers }
+    : keepModelInBody(body, headers);
   const response = await client.request(method, path, request.body, request.headers, { signal });
   if (response.status >= 400) {
     throw llmHTTPError(response.status, response.body);
@@ -158,7 +160,7 @@ async function doRawJSON(client, method, path, body, options = []) {
 
 async function* doSSE(client, method, path, body, options = []) {
   const { headers, signal } = splitOptions(options);
-  const request = moveModelToHeader(body, headers);
+  const request = keepModelInBody(body, headers);
   const response = await client.requestStream(method, path, request.body, request.headers, { signal });
   if (response.status >= 400) {
     const payload = await response.text();

@@ -46,6 +46,22 @@ export function moveModelToHeader(body, headers = {}) {
   return { body: requestBody, headers: requestHeaders };
 }
 
+export function keepModelInBody(body, headers = {}) {
+  const requestBody = { ...body };
+  const requestHeaders = { ...headers };
+
+  if (Object.keys(requestHeaders).some((key) => key.toLowerCase() === 'x-model')) {
+    throw new SeaArtError({
+      kind: ErrGeneral,
+      message: 'X-Model is not supported for LLM requests; set model in the request body',
+    });
+  }
+  if (Object.hasOwn(requestBody, 'model') && (typeof requestBody.model !== 'string' || requestBody.model.trim() === '')) {
+    throw new SeaArtError({ kind: ErrGeneral, message: 'model must be a non-empty string' });
+  }
+  return { body: requestBody, headers: requestHeaders };
+}
+
 function headerEntries(source) {
   if (source instanceof Headers) {
     return Array.from(source.entries());
