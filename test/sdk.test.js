@@ -5,7 +5,10 @@ import test from 'node:test';
 import {
   Client,
   ErrAuth,
+  ErrGeneral,
+  ErrQuota,
   ErrTaskFailed,
+  ErrTimeout,
   FileID,
   ImageURL,
   ImageScanRiskTypeErotic,
@@ -699,27 +702,27 @@ test('LLM non-streaming APIs post to the expected paths', async (t) => {
     paths.push(req.url);
     const body = req.method === 'POST' ? await readJSON(req) : undefined;
     if (req.url === '/chat/completions') {
-      assert.equal(req.headers['x-model'], 'gpt-4o-mini');
-      assert.equal(body.model, undefined);
+      assert.equal(req.headers['x-model'], undefined);
+      assert.equal(body.model, 'gpt-4o-mini');
       writeJSON(res, 200, { id: 'chat_123', choices: [{ message: { role: 'assistant', content: 'hello' } }] });
     } else if (req.url === '/v1/messages') {
-      assert.equal(req.headers['x-model'], 'claude-3-5-sonnet');
-      assert.equal(body.model, undefined);
+      assert.equal(req.headers['x-model'], undefined);
+      assert.equal(body.model, 'claude-3-5-sonnet');
       assert.equal(body.max_tokens, 32);
       writeJSON(res, 200, { id: 'msg_123', role: 'assistant', content: [{ type: 'text', text: 'hello from claude' }] });
     } else if (req.url === '/responses') {
-      assert.equal(req.headers['x-model'], 'gpt-4.1-mini');
-      assert.equal(body.model, undefined);
+      assert.equal(req.headers['x-model'], undefined);
+      assert.equal(body.model, 'gpt-4.1-mini');
       assert.equal(body.input, 'hello');
       writeJSON(res, 200, { id: 'resp_123', status: 'completed', output: [] });
     } else if (req.url === '/rerank') {
-      assert.equal(req.headers['x-model'], 'qwen3-rerank');
-      assert.equal(body.model, undefined);
+      assert.equal(req.headers['x-model'], undefined);
+      assert.equal(body.model, 'qwen3-rerank');
       assert.equal(body.query, 'mountain lake');
       writeJSON(res, 200, { id: 'rerank_123', results: [{ index: 1, relevance_score: 0.98 }] });
     } else if (req.url === '/v1/embeddings') {
-      assert.equal(req.headers['x-model'], 'text-embedding-3-small');
-      assert.equal(body.model, undefined);
+      assert.equal(req.headers['x-model'], undefined);
+      assert.equal(body.model, 'text-embedding-3-small');
       assert.equal(body.input, 'hello');
       writeJSON(res, 200, { object: 'list', data: [{ object: 'embedding', index: 0, embedding: [0.1, 0.2] }] });
     } else {
@@ -754,7 +757,25 @@ test('LLM request headers and error classification match Go SDK behavior', async
   );
 });
 
-test('LLM rejects conflicting model and X-Model values', async (t) => {
+test('LLM preserves gateway HTTP status and error message', async () => {
+  const cases = [
+    [400, ErrGeneral], [401, ErrAuth], [403, ErrAuth], [404, ErrGeneral], [408, ErrTimeout],
+    [429, ErrQuota], [500, ErrGeneral], [502, ErrGeneral], [503, ErrGeneral], [504, ErrTimeout],
+  ];
+  for (const [status, kind] of cases) {
+    const client = new Client({
+      apiKey: 'test-key',
+      llmBaseURL: 'https://llm.example.com',
+      fetch: async () => new Response(JSON.stringify({ error: { message: `gateway-${status}` } }), { status }),
+    });
+    await assert.rejects(
+      client.llm.chatCompletions({ model: 'gpt-4o-mini', messages: [] }),
+      (error) => error instanceof SeaArtError && error.status === status && error.kind === kind && error.message === `gateway-${status}`,
+    );
+  }
+});
+
+test('LLM rejects X-Model headers', async (t) => {
   const client = await testClient(t, async () => assert.fail('request should not be sent'));
 
   await assert.rejects(
@@ -762,7 +783,16 @@ test('LLM rejects conflicting model and X-Model values', async (t) => {
       { model: 'gpt-4o-mini', messages: [] },
       withHeader('X-Model', 'another-model'),
     ),
-    /model and X-Model cannot both be set/,
+    /X-Model is not supported for LLM requests/,
+  );
+});
+
+test('LLM listModels rejects X-Model headers', async (t) => {
+  const client = await testClient(t, async () => assert.fail('request should not be sent'));
+
+  await assert.rejects(
+    client.llm.listModels(withHeader('X-Model', 'another-model')),
+    /X-Model is not supported for LLM requests/,
   );
 });
 
@@ -787,9 +817,9 @@ test('LLM chat completions stream parses SSE events', async (t) => {
   const client = await testClient(t, async (req, res) => {
     assert.equal(req.method, 'POST');
     assert.equal(req.url, '/chat/completions');
-    assert.equal(req.headers['x-model'], 'gpt-4o-mini');
+    assert.equal(req.headers['x-model'], undefined);
     const body = await readJSON(req);
-    assert.equal(body.model, undefined);
+    assert.equal(body.model, 'gpt-4o-mini');
     assert.equal(body.stream, true);
 
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
