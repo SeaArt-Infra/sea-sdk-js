@@ -59,6 +59,13 @@ test('Billing query uses the monitor endpoint and decodes the envelope', async (
   const client = new Client({
     apiKey: 'test-key',
     billingBaseURL: 'https://billing.example.com',
+    headers: {
+      'x-infra-project-id': 'project-123',
+      'x-infra-af-id': 'af-123',
+      'x-infra-session-id': 'session-123',
+      'x-infra-user-id': 'user-123',
+      'x-request-id': 'request-123',
+    },
     fetch: async (url, options) => {
       request = { url, options };
       return new Response(JSON.stringify({
@@ -74,10 +81,18 @@ test('Billing query uses the monitor endpoint and decodes the envelope', async (
     },
   });
 
-  const response = await client.billing.query({ environment: 'release', page: 2, page_size: 10 });
+  const response = await client.billing.query(
+    { environment: 'release', page: 2, page_size: 10 },
+    withHeader('X-Request-ID', 'request-override'),
+  );
   assert.equal(new URL(request.url).pathname, '/api/v1/cost/billing');
   assert.equal(new URL(request.url).search, '?environment=release&page=2&page_size=10');
   assert.equal(request.options.headers.get('Authorization'), 'Bearer test-key');
+  assert.equal(request.options.headers.get('x-infra-project-id'), 'project-123');
+  assert.equal(request.options.headers.get('x-infra-af-id'), 'af-123');
+  assert.equal(request.options.headers.get('x-infra-session-id'), 'session-123');
+  assert.equal(request.options.headers.get('x-infra-user-id'), 'user-123');
+  assert.equal(request.options.headers.get('x-request-id'), 'request-override');
   assert.equal(response.team, 'SeaComfyui');
   assert.equal(response.summary.total_cost, '1.25');
   assert.equal(client.Billing.Query, client.billing.Query);

@@ -26,6 +26,7 @@ Features:
 | [Audio Scan](#audio-scan) | `client.modal.scanAudio(...)` | Detect audio content risks |
 | [LLM API](#llm-api) | `client.llm` / `client.LLM` | OpenAI / Anthropic / Responses / Embeddings / Rerank compatible APIs |
 | [Billing API](#billing-api) | `client.billing` / `client.Billing` | Query the authenticated team's cost statement |
+| [Gateway Context Headers](#gateway-context-headers) | `headers` | Required caller context sent with every gateway request |
 
 ## Installation
 
@@ -88,6 +89,26 @@ const client = new Client({
   project: 'my-project',
 });
 ```
+
+## Gateway Context Headers
+
+Every gateway request requires caller context. Set these values once in the client `headers` option; the SDK attaches them to multimodal, LLM, billing, scan, passthrough, and task-polling requests. A per-call `withHeaders(...)` value overrides the corresponding client default only for that request.
+
+```js
+const client = new Client({
+  apiKey: 'sa-your-api-key',
+  baseURL: 'https://gateway.example.com',
+  headers: {
+    'x-infra-project-id': 'project-id',
+    'x-infra-af-id': 'af-id',
+    'x-infra-session-id': 'session-id',
+    'x-infra-user-id': 'user-id',
+    'x-request-id': 'request-id',
+  },
+});
+```
+
+Supply values from the calling service's request context. Do not hard-code another user's identity or reuse a client across requests with different context values.
 
 ## Multimodal API
 
@@ -804,6 +825,21 @@ const client = new Client({
 Passing `baseURL` derives `/model` and `/llm` service URLs. Override `modelBaseURL`, `llmBaseURL`, or `passthroughBaseURL` only when services use separate gateways. Do not expose API keys in source control or logs.
 
 For LLM APIs, keep the selected model in the payload's top-level `model` field. The SDK serializes it in the JSON body and does not use `X-Model`; do not pass `X-Model` with `withHeader(...)` for LLM requests. Multimodal task creation and precharge continue to route their body model through `X-Model`.
+
+## Gateway Context Headers
+
+The gateway requires `x-infra-project-id`, `x-infra-af-id`, `x-infra-session-id`, `x-infra-user-id`, and `x-request-id` on every request. Configure them through the client `headers` option; they are sent for generation, task polling, LLM, billing, scans, and passthrough requests. Per-call `withHeaders(...)` values override a client default for that call only.
+
+```js
+const headers = {
+  'x-infra-project-id': 'project-id',
+  'x-infra-af-id': 'af-id',
+  'x-infra-session-id': 'session-id',
+  'x-infra-user-id': 'user-id',
+  'x-request-id': 'request-id',
+};
+const client = new Client({ apiKey: 'sa-your-api-key', headers });
+```
 
 ## Multimodal Tasks
 

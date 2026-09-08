@@ -19,6 +19,7 @@
  * @property {string} [passthroughBaseURL]
  * @property {string} [billingBaseURL]
  * @property {string} [project]
+ * @property {Record<string, string | string[]>} [headers] Default headers sent with every gateway request.
  * @property {number} [timeout] Timeout in milliseconds.
  * @property {typeof fetch} [fetch] Custom fetch implementation.
  */

@@ -25,10 +25,12 @@ export class Client {
     this.passthroughBaseURL = endpoints.passthrough;
     this.billingBaseURL = endpoints.billing;
     this.project = config.project ?? config.Project ?? '';
+    this.headers = config.headers ?? config.Headers ?? {};
 
     const shared = {
       apiKey: this.apiKey,
       project: this.project,
+      headers: this.headers,
       timeout,
       fetch: config.fetch,
     };
