@@ -1,13 +1,14 @@
 import { ErrGeneral, ErrNetwork, SeaArtError } from './errors.js';
 
 export class TransportClient {
-  constructor({ apiKey = '', baseURL, project = '', userAgent, timeout = 5 * 60 * 1000, fetch: fetchImpl } = {}) {
+  constructor({ apiKey = '', baseURL, project = '', headers = {}, userAgent, timeout = 5 * 60 * 1000, fetch: fetchImpl } = {}) {
     if (!baseURL) {
       throw new SeaArtError({ kind: ErrGeneral, message: 'baseURL is required' });
     }
     this.apiKey = apiKey;
     this.baseURL = baseURL;
     this.project = project;
+    this.defaultHeaders = headers;
     this.userAgent = userAgent;
     this.timeout = timeout;
     this.fetch = fetchImpl ?? globalThis.fetch;
@@ -67,6 +68,16 @@ export class TransportClient {
       headers.set('X-Project', this.project);
     }
 
+    for (const [key, value] of Object.entries(this.defaultHeaders ?? {})) {
+      headers.delete(key);
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          headers.append(key, String(item));
+        }
+      } else if (value !== undefined && value !== null) {
+        headers.set(key, String(value));
+      }
+    }
     for (const [key, value] of Object.entries(extraHeaders ?? {})) {
       headers.delete(key);
       if (Array.isArray(value)) {
