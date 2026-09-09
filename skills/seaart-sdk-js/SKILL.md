@@ -16,7 +16,7 @@ npm install https://github.com/SeaArt-Infra/sea-sdk-js.git
 ## Workflow
 
 1. Create one `Client` with the API key and reuse it across requests.
-2. Select `client.modal` for generation, model skills, precharge, or safety scans; `client.llm` for LLM APIs; and `client.passthrough` for vendor-native paths.
+2. Select `client.modal` for generation, model skills, precharge, or safety scans; `client.billing` for team-scoped cost statements; `client.llm` for LLM APIs; and `client.passthrough` for vendor-native paths.
 3. For a multimodal model, retrieve `client.modal.getModelSkill(model)` before building model-specific parameters.
 4. Poll generation tasks with `task.wait(...)`, then inspect `task.output` after completion.
 5. Decode successful LLM JSON strings with `decode`; catch `SeaArtError` at the request boundary.
@@ -24,7 +24,7 @@ npm install https://github.com/SeaArt-Infra/sea-sdk-js.git
 ## Initialize Client
 
 ```js
-import { Client } from 'sea_sdk_js';
+import { Client, withHeaders } from 'sea_sdk_js';
 
 const client = new Client({
   apiKey: 'sa-your-api-key',
@@ -40,28 +40,34 @@ For LLM APIs, keep the selected model in the payload's top-level `model` field. 
 
 ## Gateway Context Headers
 
-The gateway requires `x-infra-project-id`, `x-infra-af-id`, `x-infra-session-id`, `x-infra-user-id`, and `x-request-id` on every request. Configure them through the client `headers` option; the SDK sends them for generation, task polling, LLM, billing, scans, and passthrough requests. Per-call `withHeaders(...)` values override a client default for that call only.
+Gateway API calls require `x-infra-project-id`, `x-infra-af-id`, `x-infra-session-id`, `x-infra-user-id`, and `x-request-id`. These values are request-specific, so derive them from the current caller and pass them with `withHeaders(...)`. `task.wait(...)` does not require these headers.
 
 ```js
-const headers = {
-  'x-infra-project-id': 'project-id',
-  'x-infra-af-id': 'af-id',
-  'x-infra-session-id': 'session-id',
-  'x-infra-user-id': 'user-id',
-  'x-request-id': 'request-id',
-};
-const client = new Client({ apiKey: 'sa-your-api-key', headers });
+const requestContext = withHeaders({
+  'x-infra-project-id': projectId,
+  'x-infra-af-id': afId,
+  'x-infra-session-id': sessionId,
+  'x-infra-user-id': userId,
+  'x-request-id': requestId,
+});
+
+const raw = await client.llm.chatCompletions({
+  model: 'model-id',
+  messages: [{ role: 'user', content: 'Hello' }],
+}, requestContext);
 ```
+
+Pass `requestContext` as the final argument to every direct gateway API call, such as `client.modal.create(body, requestContext)`, `client.billing.query(query, requestContext)`, and `client.llm.chatCompletions(payload, requestContext)`. Reserve the client `headers` option for headers that are genuinely fixed for the client's whole lifetime.
 
 ## Multimodal Tasks
 
 Search before choosing a model, and retrieve its model skill when exact parameter names matter:
 
 ```js
-const models = await client.modal.listModels({ query: 'image', limit: 10 });
+const models = await client.modal.listModels({ query: 'image', limit: 10 }, requestContext);
 console.log(models.hits);
 
-const skill = await client.modal.getModelSkill('alibaba_wanx26_i2v_flash');
+const skill = await client.modal.getModelSkill('alibaba_wanx26_i2v_flash', requestContext);
 console.log(skill);
 ```
 
@@ -81,7 +87,7 @@ const body = newTask('alibaba_wanx26_i2v_flash')
   })
   .build();
 
-const task = await client.modal.create(body);
+const task = await client.modal.create(body, requestContext);
 const completed = await task.wait(withPollInterval(3000), withPollTimeout(300_000));
 for (const output of completed.output) {
   for (const content of output.content ?? []) {
@@ -90,7 +96,12 @@ for (const output of completed.output) {
 }
 ```
 
-Use `client.modal.precharge(body)` before a generation request when cost estimation is required. Do not assume every model uses the `input` and `parameters` nesting: follow the result from `getModelSkill`.
+Use `client.modal.precharge(body, requestContext)` before a generation request when cost estimation is required. Do not assume every model uses the `input` and `parameters` nesting: follow the result from `getModelSkill`.
+
+## Billing Queries
+
+Use `client.billing.query({...}, requestContext)` for the authenticated team's cost statement. The gateway derives the team from the Bearer token, so callers must not pass `team_alias`. The default environment scope is `develop` plus `release`; set `environment` to one of those values to select a single environment. Use `start`, `end`, `provider`, `credential_name`, `model_group`, `page`, and `page_size` for supported filters.
+Use RFC3339 or date-only values for `start`/`end`; the range is `[start, end)`, and omitted values default to the previous seven days.
 
 ## ComfyUI Quick Apps
 
@@ -104,7 +115,7 @@ const task = await client.modal.createComfyUITask({
     { field: 'select', value: 1 },
   ],
   highMemory: true,
-});
+}, requestContext);
 const done = await task.wait(withPollInterval(3000), withPollTimeout(300000));
 console.log(done.urls());
 ```
@@ -119,7 +130,7 @@ import { decode } from 'sea_sdk_js';
 const raw = await client.llm.chatCompletions({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Hello' }],
-});
+}, requestContext);
 const response = decode(raw);
 console.log(response.choices[0].message.content);
 ```
@@ -130,7 +141,7 @@ Use the dedicated streaming methods rather than setting `stream: true` on non-st
 for await (const event of client.llm.chatCompletionsStream({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Hello' }],
-})) {
+}, requestContext)) {
   if (event.done) {
     break;
   }
@@ -151,7 +162,7 @@ Use the dedicated scan methods for image/video, face, audio, sensitive-word, sho
 import { ErrAuth, ErrQuota, ErrTimeout, SeaArtError } from 'sea_sdk_js';
 
 try {
-  await client.modal.scanText({ text: 'Text to check' });
+  await client.modal.scanText({ text: 'Text to check' }, requestContext);
 } catch (error) {
   if (error instanceof SeaArtError && [ErrAuth, ErrQuota, ErrTimeout].includes(error.kind)) {
     throw error;
