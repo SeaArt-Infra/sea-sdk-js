@@ -26,7 +26,7 @@ Features:
 | [Audio Scan](#audio-scan) | `client.modal.scanAudio(...)` | Detect audio content risks |
 | [LLM API](#llm-api) | `client.llm` / `client.LLM` | OpenAI / Anthropic / Responses / Embeddings / Rerank compatible APIs |
 | [Billing API](#billing-api) | `client.billing` / `client.Billing` | Query the authenticated team's cost statement |
-| [Gateway Context Headers](#gateway-context-headers) | `headers` | Required caller context sent with every gateway request |
+| [Gateway Context Headers](#gateway-context-headers) | `withHeaders(...)` | Required caller context supplied with each gateway request |
 
 ## Installation
 
@@ -50,7 +50,7 @@ Requirements:
 ## Initialization
 
 ```js
-import { Client } from 'sea_sdk_js';
+import { Client, withHeaders } from 'sea_sdk_js';
 
 const client = new Client({
   apiKey: 'sa-your-api-key',
@@ -92,23 +92,24 @@ const client = new Client({
 
 ## Gateway Context Headers
 
-Every gateway request requires caller context. Set these values once in the client `headers` option; the SDK attaches them to multimodal, LLM, billing, scan, passthrough, and task-polling requests. A per-call `withHeaders(...)` value overrides the corresponding client default only for that request.
+Gateway API calls require caller context. These values commonly change with the end user or incoming request, so create them from the current request and pass them with `withHeaders(...)`. Do not place dynamic caller identity in a long-lived client `headers` option. `task.wait(...)` does not require these headers.
 
 ```js
-const client = new Client({
-  apiKey: 'sa-your-api-key',
-  baseURL: 'https://gateway.example.com',
-  headers: {
-    'x-infra-project-id': 'project-id',
-    'x-infra-af-id': 'af-id',
-    'x-infra-session-id': 'session-id',
-    'x-infra-user-id': 'user-id',
-    'x-request-id': 'request-id',
-  },
+const requestContext = withHeaders({
+  'x-infra-project-id': projectId,
+  'x-infra-af-id': afId,
+  'x-infra-session-id': sessionId,
+  'x-infra-user-id': userId,
+  'x-request-id': requestId,
 });
+
+const raw = await client.llm.chatCompletions({
+  model: 'model-id',
+  messages: [{ role: 'user', content: 'Hello' }],
+}, requestContext);
 ```
 
-Supply values from the calling service's request context. Do not hard-code another user's identity or reuse a client across requests with different context values.
+Pass `requestContext` as the final argument to any direct gateway call, such as `client.modal.create(body, requestContext)`, `client.billing.query(query, requestContext)`, or `client.llm.chatCompletions(payload, requestContext)`. The client `headers` option remains available only for headers that are genuinely fixed for its whole lifetime. Do not hard-code or reuse another caller's identity.
 
 ## Multimodal API
 
@@ -812,7 +813,7 @@ npm install https://github.com/SeaArt-Infra/sea-sdk-js.git
 ## Initialize Client
 
 ```js
-import { Client } from 'sea_sdk_js';
+import { Client, withHeaders } from 'sea_sdk_js';
 
 const client = new Client({
   apiKey: 'sa-your-api-key',
@@ -828,28 +829,34 @@ For LLM APIs, keep the selected model in the payload's top-level `model` field. 
 
 ## Gateway Context Headers
 
-The gateway requires `x-infra-project-id`, `x-infra-af-id`, `x-infra-session-id`, `x-infra-user-id`, and `x-request-id` on every request. Configure them through the client `headers` option; they are sent for generation, task polling, LLM, billing, scans, and passthrough requests. Per-call `withHeaders(...)` values override a client default for that call only.
+Gateway API calls require `x-infra-project-id`, `x-infra-af-id`, `x-infra-session-id`, `x-infra-user-id`, and `x-request-id`. These values are request-specific, so derive them from the current caller and pass them with `withHeaders(...)`. `task.wait(...)` does not require these headers.
 
 ```js
-const headers = {
-  'x-infra-project-id': 'project-id',
-  'x-infra-af-id': 'af-id',
-  'x-infra-session-id': 'session-id',
-  'x-infra-user-id': 'user-id',
-  'x-request-id': 'request-id',
-};
-const client = new Client({ apiKey: 'sa-your-api-key', headers });
+const requestContext = withHeaders({
+  'x-infra-project-id': projectId,
+  'x-infra-af-id': afId,
+  'x-infra-session-id': sessionId,
+  'x-infra-user-id': userId,
+  'x-request-id': requestId,
+});
+
+const raw = await client.llm.chatCompletions({
+  model: 'model-id',
+  messages: [{ role: 'user', content: 'Hello' }],
+}, requestContext);
 ```
+
+Pass `requestContext` as the final argument to every direct gateway API call, such as `client.modal.create(body, requestContext)`, `client.billing.query(query, requestContext)`, and `client.llm.chatCompletions(payload, requestContext)`. Reserve the client `headers` option for headers that are genuinely fixed for the client's whole lifetime.
 
 ## Multimodal Tasks
 
 Search before choosing a model, and retrieve its model skill when exact parameter names matter:
 
 ```js
-const models = await client.modal.listModels({ query: 'image', limit: 10 });
+const models = await client.modal.listModels({ query: 'image', limit: 10 }, requestContext);
 console.log(models.hits);
 
-const skill = await client.modal.getModelSkill('alibaba_wanx26_i2v_flash');
+const skill = await client.modal.getModelSkill('alibaba_wanx26_i2v_flash', requestContext);
 console.log(skill);
 ```
 
@@ -869,7 +876,7 @@ const body = newTask('alibaba_wanx26_i2v_flash')
   })
   .build();
 
-const task = await client.modal.create(body);
+const task = await client.modal.create(body, requestContext);
 const completed = await task.wait(withPollInterval(3000), withPollTimeout(300_000));
 for (const output of completed.output) {
   for (const content of output.content ?? []) {
@@ -878,11 +885,11 @@ for (const output of completed.output) {
 }
 ```
 
-Use `client.modal.precharge(body)` before a generation request when cost estimation is required. Do not assume every model uses the `input` and `parameters` nesting: follow the result from `getModelSkill`.
+Use `client.modal.precharge(body, requestContext)` before a generation request when cost estimation is required. Do not assume every model uses the `input` and `parameters` nesting: follow the result from `getModelSkill`.
 
 ## Billing Queries
 
-Use `client.billing.query({...})` for the authenticated team's cost statement. The gateway derives the team from the Bearer token, so callers must not pass `team_alias`. The default environment scope is `develop` plus `release`; set `environment` to one of those values to select a single environment. Use `start`, `end`, `provider`, `credential_name`, `model_group`, `page`, and `page_size` for supported filters.
+Use `client.billing.query({...}, requestContext)` for the authenticated team's cost statement. The gateway derives the team from the Bearer token, so callers must not pass `team_alias`. The default environment scope is `develop` plus `release`; set `environment` to one of those values to select a single environment. Use `start`, `end`, `provider`, `credential_name`, `model_group`, `page`, and `page_size` for supported filters.
 Use RFC3339 or date-only values for `start`/`end`; the range is `[start, end)`, and omitted values default to the previous seven days.
 
 ## ComfyUI Quick Apps
@@ -897,7 +904,7 @@ const task = await client.modal.createComfyUITask({
     { field: 'select', value: 1 },
   ],
   highMemory: true,
-});
+}, requestContext);
 const done = await task.wait(withPollInterval(3000), withPollTimeout(300000));
 console.log(done.urls());
 ```
@@ -912,7 +919,7 @@ import { decode } from 'sea_sdk_js';
 const raw = await client.llm.chatCompletions({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Hello' }],
-});
+}, requestContext);
 const response = decode(raw);
 console.log(response.choices[0].message.content);
 ```
@@ -923,7 +930,7 @@ Use the dedicated streaming methods rather than setting `stream: true` on non-st
 for await (const event of client.llm.chatCompletionsStream({
   model: 'gpt-4o-mini',
   messages: [{ role: 'user', content: 'Hello' }],
-})) {
+}, requestContext)) {
   if (event.done) {
     break;
   }
@@ -938,13 +945,13 @@ Use `client.llm.messages` / `messagesStream` for Anthropic Messages and `respons
 
 Use passthrough only for a vendor-native path such as `/kling/...`, `/vidu/...`, or `/google/...`; pass a relative path and preserve the returned status, headers, and raw body.
 
-Use the dedicated scan methods for image/video, face, audio, sensitive-word, short-text, or visual-and-structured-text checks. Image and face scans accept either `uri` or `img_base64`; video and audio scans require `uri`.
+Use the dedicated scan methods for image/video, face, audio, sensitive-word, short-text, character-copy quality, or visual-and-structured-text checks. Image and face scans accept either `uri` or `img_base64`; video and audio scans require `uri`. Character quality scans use `client.modal.scanCharacterQuality(...)` with a flat production-line A or B field set.
 
 ```js
 import { ErrAuth, ErrQuota, ErrTimeout, SeaArtError } from 'sea_sdk_js';
 
 try {
-  await client.modal.scanText({ text: 'Text to check' });
+  await client.modal.scanText({ text: 'Text to check' }, requestContext);
 } catch (error) {
   if (error instanceof SeaArtError && [ErrAuth, ErrQuota, ErrTimeout].includes(error.kind)) {
     throw error;
