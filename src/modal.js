@@ -715,9 +715,11 @@ function httpStatusText(status) {
  * task status would drop the terminal event and lose the result.
  */
 export class TaskStreamEvent {
-  constructor({ event = '', taskID = '', cursor = 0, chunks, task = null, errorCode = '', errorMessage = '', done = false, error = null } = {}) {
+  constructor({ event = '', taskID = '', status = '', cursor = 0, chunks, task = null, errorCode = '', errorMessage = '', done = false, error = null } = {}) {
     this.event = event;
     this.Event = event;
+    this.status = status;
+    this.Status = status;
     this.taskID = taskID;
     this.TaskID = taskID;
     this.cursor = cursor;
@@ -808,29 +810,51 @@ function parseTaskStreamEvent(eventName, data) {
   let payload;
   try {
     payload = JSON.parse(data);
-  } catch {
-    payload = {};
+  } catch (error) {
+    // Surface a malformed frame instead of turning it into an empty event that
+    // hides the failure reason.
+    return new TaskStreamEvent({
+      event: name,
+      error: new SeaArtError({ kind: ErrGeneral, message: `failed to decode stream frame: ${error.message}` }),
+    });
   }
+
+  const status = payload?.status !== undefined && payload?.status !== null ? String(payload.status) : '';
 
   if (name === 'done') {
     const task = newTaskFromResponse(null, payload);
-    return new TaskStreamEvent({ event: 'done', taskID: payload?.id ?? '', task, done: true });
+    return new TaskStreamEvent({ event: 'done', taskID: payload?.id ?? '', status, task, done: true });
   }
   if (name === 'error') {
     return new TaskStreamEvent({
       event: 'error',
       taskID: payload?.id ?? '',
+      status,
       errorCode: payload?.error?.code !== undefined && payload?.error?.code !== null ? String(payload.error.code) : '',
-      errorMessage: payload?.error?.message !== undefined && payload?.error?.message !== null ? String(payload.error.message) : '',
+      // The gateway uses message on this endpoint, but error_message also appears
+      // on gateway error payloads; keep whichever is present so the failure reason
+      // is never dropped.
+      errorMessage: firstNonEmpty(payload?.error?.message, payload?.error?.error_message),
       done: true,
     });
   }
   return new TaskStreamEvent({
     event: 'output',
     taskID: payload?.id ?? '',
+    status,
     cursor: typeof payload?.cursor === 'number' ? payload.cursor : 0,
     chunks: payload?.output ?? [],
   });
+}
+
+/** First value that is present and non-empty, as a string. */
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value) !== '') {
+      return String(value);
+    }
+  }
+  return '';
 }
 
 /** Read the gateway's generation SSE stream and yield task events. */
@@ -841,7 +865,7 @@ async function* streamTaskEvents(client, method, path, body, headers, signal) {
     throw syncDeliveryError(response.status, payload);
   }
   if (!response.body) {
-    return;
+    throw streamEndedEarlyError();
   }
 
   const reader = response.body.getReader();
@@ -849,6 +873,7 @@ async function* streamTaskEvents(client, method, path, body, headers, signal) {
   let buffer = '';
   let eventName = '';
   let dataLines = [];
+  let sawTerminal = false;
 
   const emit = function* () {
     if (dataLines.length === 0 && eventName === '') {
@@ -859,10 +884,15 @@ async function* streamTaskEvents(client, method, path, body, headers, signal) {
     eventName = '';
     dataLines = [];
     if (data === '' || data === '[DONE]') {
+      sawTerminal = true;
       yield new TaskStreamEvent({ event: 'done', done: true });
       return;
     }
-    yield parseTaskStreamEvent(name, data);
+    const event = parseTaskStreamEvent(name, data);
+    if (event.done) {
+      sawTerminal = true;
+    }
+    yield event;
   };
 
   try {
@@ -902,6 +932,12 @@ async function* streamTaskEvents(client, method, path, body, headers, signal) {
       }
     }
     yield* emit();
+
+    // A stream that ends without a terminal event is a truncated delivery: the
+    // caller must not treat the partial result as success.
+    if (!sawTerminal) {
+      throw streamEndedEarlyError();
+    }
   } catch (error) {
     if (error instanceof SeaArtError) {
       throw error;
@@ -910,4 +946,11 @@ async function* streamTaskEvents(client, method, path, body, headers, signal) {
   } finally {
     reader.releaseLock();
   }
+}
+
+function streamEndedEarlyError() {
+  return new SeaArtError({
+    kind: ErrNetwork,
+    message: 'stream ended before a terminal event; resume with subscribe(taskID, cursor)',
+  });
 }

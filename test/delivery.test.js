@@ -124,6 +124,7 @@ test('createStream yields chunks then the final result', async () => {
   assert.equal(first.taskID, 'task_s');
   assert.equal(first.cursor, 1);
   assert.equal(first.done, false);
+  assert.equal(first.status, 'in_progress', 'output frames must expose the frame status');
   assert.deepEqual(first.urls(), ['https://cdn.example.com/0.wav']);
   // the chunk payload is passed through as sent by the gateway
   assert.equal(first.chunks[0].content[0].chunk_index, 0);
@@ -230,4 +231,61 @@ test('task.stream() subscribes to its own task', async () => {
   assert.deepEqual(paths, ['/model/v1/generation', '/model/v1/generation/task/task_bound/stream']);
   assert.equal(events[0].done, true);
   assert.equal(events[0].task.id, 'task_bound');
+});
+
+test('createStream fails when the stream ends before a terminal event', async () => {
+  const client = clientWithFetch(async () => sseResponse([
+    // chunks arrive, then the connection is cut: no done/error frame
+    'event: output\ndata: {"id":"task_s","status":"in_progress","output":[{"content":[{"type":"audio","url":"https://cdn.example.com/0.wav"}]}],"cursor":1}\n\n',
+  ]));
+
+  const seen = [];
+  await assert.rejects(
+    async () => {
+      for await (const event of client.modal.createStream({ model: 'm' })) {
+        seen.push(event);
+      }
+    },
+    (error) => {
+      assert.ok(error instanceof SeaArtError);
+      assert.equal(error.kind, 'network');
+      assert.match(error.message, /terminal event/);
+      return true;
+    },
+  );
+  assert.equal(seen.length, 1, 'the chunks that did arrive are still delivered');
+});
+
+test('createStream reads error_message when the gateway reports it that way', async () => {
+  const client = clientWithFetch(async () => sseResponse([
+    'event: error\ndata: {"id":"task_s","status":"in_progress","error":{"code":"SYNC_TIMEOUT","error_message":"still running"}}\n\n',
+  ]));
+
+  const events = [];
+  for await (const event of client.modal.createStream({ model: 'm' })) {
+    events.push(event);
+  }
+
+  assert.equal(events[0].errorCode, 'SYNC_TIMEOUT');
+  assert.equal(events[0].errorMessage, 'still running');
+  assert.equal(events[0].status, 'in_progress');
+});
+
+test('createStream surfaces malformed frames instead of dropping them', async () => {
+  const client = clientWithFetch(async () => sseResponse([
+    'event: output\ndata: {not json\n\n',
+    'event: done\ndata: {"id":"task_bad","status":"completed","output":[]}\n\n',
+  ]));
+
+  const events = [];
+  for await (const event of client.modal.createStream({ model: 'm' })) {
+    events.push(event);
+  }
+
+  const malformed = events.find((event) => event.error);
+  assert.ok(malformed, 'the malformed frame must be surfaced');
+  assert.match(malformed.error.message, /decode stream frame/);
+
+  const terminal = events.find((event) => event.done);
+  assert.equal(terminal.task.status, 'completed', 'the stream continues after a malformed frame');
 });
