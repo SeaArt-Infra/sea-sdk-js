@@ -58,6 +58,9 @@ export class Client {
 
     this.Modal = goStyleService(this.modal, {
       create: 'Create',
+      createSync: 'CreateSync',
+      createStream: 'CreateStream',
+      subscribe: 'Subscribe',
       createComfyUITask: 'CreateComfyUITask',
       precharge: 'Precharge',
       get: 'Get',
