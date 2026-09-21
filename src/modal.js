@@ -2,6 +2,10 @@ import { ErrGeneral, ErrNetwork, ErrTaskFailed, ErrTimeout, SeaArtError, newHTTP
 import { applyPollOptions, buildRequestOptions, moveModelToHeader } from './options.js';
 
 const pathGeneration = '/v1/generation';
+const pathGenerationSync = '/v1/generation/sync';
+const acceptJSON = 'application/json';
+const acceptEventStream = 'text/event-stream';
+const syncTimeoutCode = 'SYNC_TIMEOUT';
 const pathPrecharge = '/v1/generation/precharge';
 const pathTask = '/v1/generation/task/';
 const pathModelSkillSearch = '/v1/models/skill/search';
@@ -119,6 +123,65 @@ export class ModalService {
 
   async wait(taskID, ...options) {
     return waitTask(this.client, taskID, options);
+  }
+
+  /**
+   * Submit a task and block until it reaches a terminal state.
+   *
+   * One call instead of create + wait: the caller passes the same body as create
+   * and never picks a route or a response format. A failed task throws a
+   * SeaArtError with kind task_failed, like wait.
+   *
+   * Do not use this for tasks that may run longer than ~120 seconds: the wait is
+   * silent, so a proxy or load balancer can drop the connection at its idle
+   * timeout. Use create + wait for those tasks, or createStream when progress is
+   * wanted. If the gateway gives up waiting, the thrown error has kind timeout
+   * and taskID set, so the task can be resumed instead of resubmitted.
+   */
+  async createSync(body, ...options) {
+    const { headers, signal } = splitOptions(options);
+    const request = moveModelToHeader(body, withDefaultHeader(headers, 'Accept', acceptJSON));
+    const response = await this.client.request('POST', pathGenerationSync, request.body, request.headers, { signal });
+    if (response.status >= 400) {
+      throw syncDeliveryError(response.status, response.body);
+    }
+
+    const task = newTaskFromResponse(this.client, decodeJSON(response.body));
+    if (String(task.status ?? '').toLowerCase() === 'failed') {
+      throw taskFailedError(task);
+    }
+    return task;
+  }
+
+  /**
+   * Submit a task and stream its output as it is produced.
+   *
+   * Yields TaskStreamEvent: output frames carry the chunks that arrived (one
+   * frame may carry several), the terminal done frame carries the complete
+   * result, and error frames report a delivery failure or timeout. Stop on
+   * event.done - never on the status of a chunk frame, which is always
+   * in_progress.
+   */
+  async *createStream(body, ...options) {
+    const { headers, signal } = splitOptions(options);
+    const request = moveModelToHeader(body, withDefaultHeader(headers, 'Accept', acceptEventStream));
+    yield* streamTaskEvents(this.client, 'POST', pathGenerationSync, request.body, request.headers, signal);
+  }
+
+  /**
+   * Stream an existing task's incremental output, starting after cursor.
+   *
+   * Works for running tasks, finished tasks (chunks replay from cursor) and
+   * tasks created elsewhere, which makes a dropped stream resumable without
+   * resubmitting the work.
+   */
+  async *subscribe(taskID, cursor = 0, ...options) {
+    const id = String(taskID ?? '').trim();
+    if (!id) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'task_id is required' });
+    }
+    const { headers, signal } = splitOptions(options);
+    yield* streamTaskEvents(this.client, 'GET', taskStreamPath(id, cursor), undefined, withDefaultHeader(headers, 'Accept', acceptEventStream), signal);
   }
 
   async listModels(params = {}, ...options) {
@@ -464,6 +527,19 @@ export class Task {
   async Wait(...options) {
     return this.wait(...options);
   }
+
+  /** Subscribe to this task's incremental output, starting after cursor. */
+  async *stream(cursor = 0, ...options) {
+    if (!this.client) {
+      throw new SeaArtError({ kind: ErrGeneral, message: 'task is detached from client' });
+    }
+    const { headers, signal } = splitOptions(options);
+    yield* streamTaskEvents(this.client, 'GET', taskStreamPath(this.id, cursor), undefined, withDefaultHeader(headers, 'Accept', acceptEventStream), signal);
+  }
+
+  async *Stream(cursor = 0, ...options) {
+    yield* this.stream(cursor, ...options);
+  }
 }
 
 async function getTask(client, taskID, headers = {}, signal) {
@@ -625,4 +701,213 @@ function httpStatusText(status) {
     503: 'Service Unavailable',
     504: 'Gateway Timeout',
   }[status];
+}
+
+/**
+ * One event of a streamed generation delivery.
+ *
+ * event is 'output' (event.chunks holds the new chunks, event.cursor is the
+ * resume cursor), 'done' (event.task holds the complete result) or 'error'
+ * (event.errorCode / event.errorMessage describe the failure).
+ *
+ * Judge the end of the stream by event.done: it is true for both 'done' and
+ * 'error'. Chunk frames always report status 'in_progress', so stopping on a
+ * task status would drop the terminal event and lose the result.
+ */
+export class TaskStreamEvent {
+  constructor({ event = '', taskID = '', cursor = 0, chunks, task = null, errorCode = '', errorMessage = '', done = false, error = null } = {}) {
+    this.event = event;
+    this.Event = event;
+    this.taskID = taskID;
+    this.TaskID = taskID;
+    this.cursor = cursor;
+    this.Cursor = cursor;
+    this.chunks = chunks ?? [];
+    this.Chunks = this.chunks;
+    this.task = task;
+    this.Task = task;
+    this.errorCode = errorCode;
+    this.ErrorCode = errorCode;
+    this.errorMessage = errorMessage;
+    this.ErrorMessage = errorMessage;
+    this.done = done;
+    this.Done = done;
+    this.error = error;
+    this.Error = error;
+  }
+
+  /** URLs of the chunks carried by this event (empty for done/error frames). */
+  urls() {
+    const urls = [];
+    for (const item of this.chunks) {
+      for (const content of item?.content ?? []) {
+        if (content?.url) {
+          urls.push(content.url);
+        }
+      }
+    }
+    return urls;
+  }
+
+  Urls() {
+    return this.urls();
+  }
+}
+
+function taskStreamPath(taskID, cursor) {
+  const suffix = cursor > 0 ? `?cursor=${Number(cursor)}` : '';
+  return `${pathTask}${encodeURIComponent(String(taskID).trim())}/stream${suffix}`;
+}
+
+function taskFailedError(task) {
+  const detail = task.error?.error_message ?? task.error?.message;
+  const suffix = detail ? `: ${detail}` : '';
+  return new SeaArtError({ kind: ErrTaskFailed, message: `task failed${suffix}`, taskID: task.id, code: task.error?.code });
+}
+
+/**
+ * Turn a failed synchronous delivery into an SDK error.
+ *
+ * Starts from the generic HTTP error so the status keeps driving the kind
+ * (429 -> quota, 504 -> timeout), then keeps what only this endpoint knows: the
+ * gateway error code and the task id that callers need to resume the task.
+ */
+function syncDeliveryError(status, payload) {
+  const error = modalHTTPError(status, payload);
+  let code = '';
+  let taskID = '';
+  try {
+    const body = JSON.parse(payload);
+    if (typeof body?.id === 'string') {
+      taskID = body.id;
+    }
+    const rawCode = body?.error?.code;
+    if (rawCode !== undefined && rawCode !== null && String(rawCode) !== '') {
+      code = String(rawCode);
+    }
+  } catch {
+    // Keep the status-derived error.
+  }
+  if (code === syncTimeoutCode) {
+    error.kind = ErrTimeout;
+    error.Kind = ErrTimeout;
+  }
+  if (code) {
+    error.code = code;
+    error.Code = code;
+  }
+  if (taskID) {
+    withTaskID(error, taskID);
+  }
+  return error;
+}
+
+/** Parse one gateway SSE frame into a TaskStreamEvent. */
+function parseTaskStreamEvent(eventName, data) {
+  const name = eventName || 'output';
+  let payload;
+  try {
+    payload = JSON.parse(data);
+  } catch {
+    payload = {};
+  }
+
+  if (name === 'done') {
+    const task = newTaskFromResponse(null, payload);
+    return new TaskStreamEvent({ event: 'done', taskID: payload?.id ?? '', task, done: true });
+  }
+  if (name === 'error') {
+    return new TaskStreamEvent({
+      event: 'error',
+      taskID: payload?.id ?? '',
+      errorCode: payload?.error?.code !== undefined && payload?.error?.code !== null ? String(payload.error.code) : '',
+      errorMessage: payload?.error?.message !== undefined && payload?.error?.message !== null ? String(payload.error.message) : '',
+      done: true,
+    });
+  }
+  return new TaskStreamEvent({
+    event: 'output',
+    taskID: payload?.id ?? '',
+    cursor: typeof payload?.cursor === 'number' ? payload.cursor : 0,
+    chunks: payload?.output ?? [],
+  });
+}
+
+/** Read the gateway's generation SSE stream and yield task events. */
+async function* streamTaskEvents(client, method, path, body, headers, signal) {
+  const response = await client.requestStream(method, path, body, headers, { signal });
+  if (response.status >= 400) {
+    const payload = await response.text();
+    throw syncDeliveryError(response.status, payload);
+  }
+  if (!response.body) {
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let eventName = '';
+  let dataLines = [];
+
+  const emit = function* () {
+    if (dataLines.length === 0 && eventName === '') {
+      return;
+    }
+    const data = dataLines.join('\n');
+    const name = eventName;
+    eventName = '';
+    dataLines = [];
+    if (data === '' || data === '[DONE]') {
+      yield new TaskStreamEvent({ event: 'done', done: true });
+      return;
+    }
+    yield parseTaskStreamEvent(name, data);
+  };
+
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      let newline;
+      while ((newline = buffer.search(/\r?\n/)) !== -1) {
+        const line = buffer.slice(0, newline).replace(/\r$/, '');
+        buffer = buffer.slice(newline + (buffer[newline] === '\r' && buffer[newline + 1] === '\n' ? 2 : 1));
+
+        if (line === '') {
+          yield* emit();
+          continue;
+        }
+        if (line.startsWith(':')) {
+          continue; // keepalive comment sent while the task runs
+        }
+        if (line.startsWith('event:')) {
+          eventName = line.slice('event:'.length).trim();
+        } else if (line.startsWith('data:')) {
+          dataLines.push(line.slice('data:'.length).trim());
+        }
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer !== '') {
+      for (const line of buffer.split(/\r?\n/)) {
+        if (line.startsWith('event:')) {
+          eventName = line.slice('event:'.length).trim();
+        } else if (line.startsWith('data:')) {
+          dataLines.push(line.slice('data:'.length).trim());
+        }
+      }
+    }
+    yield* emit();
+  } catch (error) {
+    if (error instanceof SeaArtError) {
+      throw error;
+    }
+    throw new SeaArtError({ kind: ErrNetwork, message: `stream read failed: ${error.message}` });
+  } finally {
+    reader.releaseLock();
+  }
 }

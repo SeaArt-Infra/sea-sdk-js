@@ -37,6 +37,7 @@ export {
 } from './options.js';
 export {
   Task,
+  TaskStreamEvent,
 } from './modal.js';
 export {
   newTask,
