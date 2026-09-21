@@ -289,3 +289,46 @@ test('createStream surfaces malformed frames instead of dropping them', async ()
   const terminal = events.find((event) => event.done);
   assert.equal(terminal.task.status, 'completed', 'the stream continues after a malformed frame');
 });
+
+test('the PascalCase compatibility layer exposes the new delivery methods', async () => {
+  const paths = [];
+  const client = clientWithFetch(async (url) => {
+    const path = new URL(String(url)).pathname;
+    paths.push(path);
+    if (path.endsWith('/sync')) {
+      return jsonResponse({ id: 'task_go', status: 'completed', output: [] });
+    }
+    return sseResponse(['event: done\ndata: {"id":"task_go","status":"completed","output":[]}\n\n']);
+  });
+
+  assert.equal(typeof client.Modal.CreateSync, 'function');
+  assert.equal(typeof client.Modal.CreateStream, 'function');
+  assert.equal(typeof client.Modal.Subscribe, 'function');
+
+  const task = await client.Modal.CreateSync({ model: 'm' });
+  assert.equal(task.id, 'task_go');
+
+  const events = [];
+  for await (const event of client.Modal.Subscribe('task_go', 0)) {
+    events.push(event);
+  }
+  assert.equal(events[0].task.id, 'task_go');
+});
+
+test('an invalid resume cursor is rejected instead of replaying from zero', async () => {
+  const client = clientWithFetch(async () => sseResponse([
+    'event: done\ndata: {"id":"task_c","status":"completed","output":[]}\n\n',
+  ]));
+
+  for (const bad of [-1, 'abc', '', 1.5]) {
+    await assert.rejects(
+      () => client.modal.subscribe('task_c', bad).next(),
+      (error) => {
+        assert.equal(error.kind, ErrGeneral);
+        assert.match(error.message, /cursor must be a non-negative integer/);
+        return true;
+      },
+      `cursor ${JSON.stringify(bad)} must be rejected`,
+    );
+  }
+});

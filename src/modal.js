@@ -757,8 +757,34 @@ export class TaskStreamEvent {
 }
 
 function taskStreamPath(taskID, cursor) {
-  const suffix = cursor > 0 ? `?cursor=${Number(cursor)}` : '';
+  const value = normalizeCursor(cursor);
+  const suffix = value > 0 ? `?cursor=${value}` : '';
   return `${pathTask}${encodeURIComponent(String(taskID).trim())}/stream${suffix}`;
+}
+
+/**
+ * Validate a resume cursor.
+ *
+ * A bad cursor must never be silently dropped: omitting it makes the gateway replay
+ * from the beginning, which duplicates output the caller already consumed.
+ */
+function normalizeCursor(cursor) {
+  if (cursor === undefined || cursor === null) {
+    return 0;
+  }
+  let value = Number.NaN;
+  if (typeof cursor === 'number') {
+    value = cursor;
+  } else if (typeof cursor === 'string' && /^[0-9]+$/.test(cursor.trim()) && cursor.trim() !== '') {
+    value = Number(cursor.trim());
+  }
+  if (!Number.isInteger(value) || value < 0) {
+    throw new SeaArtError({
+      kind: ErrGeneral,
+      message: `cursor must be a non-negative integer, got ${JSON.stringify(cursor)}`,
+    });
+  }
+  return value;
 }
 
 function taskFailedError(task) {
