@@ -242,7 +242,77 @@ Uppercase aliases are also provided for compatibility with Go-style naming:
 const task = await client.Modal.Create(body);
 ```
 
+### Synchronous and Streamed Delivery
+
+`create` + `wait` stays available, and two one-call deliveries cover the common cases. Both
+submit the same body; they only differ in how the result is delivered, and neither makes the
+caller choose a route or a response format.
+
+**Synchronous: `createSync`**
+
+```js
+const task = await client.modal.createSync({
+  model: 'your-model-id',
+  input: [{ params: { prompt: 'a dog is running' } }],
+});
+
+console.log(task.status, task.output[0].content[0].url, task.usage.cost);
+```
+
+`createSync` blocks until the task reaches a terminal state and returns the final task. A failed
+task throws a `SeaArtError` with `kind === ErrTaskFailed`, like `wait`. If the gateway gives up
+waiting, the error has `kind === ErrTimeout` and `taskID` set — resume that task with `subscribe`
+or `wait` instead of submitting the work again.
+
+> **Do not use `createSync` for tasks that may run longer than 120 seconds.** That wait is silent,
+> so a proxy or load balancer can drop the connection at its idle timeout. Use the asynchronous
+> path for those tasks — `create` returns immediately and every `get`/`wait` poll is a short
+> request:
+
+```js
+let task = await client.modal.create(body);
+task = await client.modal.wait(task.id, withPollInterval(5000), withPollTimeout(1800000));
+```
+
+**Streamed: `createStream` and `subscribe`**
+
+```js
+let cursor = 0;
+
+for await (const event of client.modal.createStream(body)) {
+  if (event.event === 'output') {
+    for (const chunk of event.chunks) {         // one frame may carry several chunks
+      const content = chunk.content[0];
+      console.log(content.chunk_index, content.url);
+    }
+    cursor = event.cursor;                      // remember it for a resume
+  } else if (event.event === 'done') {
+    console.log(event.task.status, event.task.usage.cost);
+  } else {                                      // 'error'
+    console.log(event.errorCode, event.errorMessage);
+  }
+}
+
+// Resume after a dropped connection, or subscribe to a task created elsewhere.
+for await (const event of client.modal.subscribe(task.id, cursor)) {
+  if (event.done) break;
+}
+```
+
+`subscribe` accepts a task id and works for running tasks, finished tasks (chunks replay from
+`cursor`) and tasks created by someone else; `task.stream(cursor)` does the same on a task
+object. Streaming holds one long-lived connection, kept alive by keepalive comments.
+
+Two rules when consuming a stream:
+
+- Stop on `event.done` (true for both `done` and `error`). Chunk frames always report
+  `status === 'in_progress'`, so stopping on a task status would drop the terminal event and lose
+  the result.
+- Iterate `event.chunks`: the gateway batches about half a second of output per frame, so a frame
+  may carry several chunks and `event.cursor` advances by that count.
+
 ### ComfyUI Quick Apps
+
 
 Pass template IDs to `listComfyUITemplates` to retrieve the corresponding quick-app parameters. `createComfyUITask` fixes the model to `comfyui`, routes it through `X-Model`, and builds the required request envelope.
 
