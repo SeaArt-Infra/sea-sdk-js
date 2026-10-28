@@ -30,17 +30,13 @@ Features:
 
 ## Installation
 
-Install the latest code from GitHub:
+Install from the GitHub repository:
 
 ```bash
-npm install https://github.com/SeaArt-Infra/sea_sdk_js.git
+npm install https://github.com/SeaArt-Infra/sea-sdk-js.git
 ```
 
-After it is published to npm, you can also install it by package name:
-
-```bash
-npm install sea_sdk_js
-```
+The package is currently marked private and is not published to the public npm registry.
 
 Requirements:
 
